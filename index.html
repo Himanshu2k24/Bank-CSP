@@ -1,0 +1,1136 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>CSP Daily Balance & Cash Manager</title>
+  
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Lucide Icons -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <!-- Canvas Confetti -->
+  <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.9.2/dist/confetti.browser.min.js"></script>
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+  
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['"Plus Jakarta Sans"', 'sans-serif'],
+            mono: ['"JetBrains Mono"', 'monospace'],
+          }
+        }
+      }
+    }
+  </script>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body class="bg-slate-100 text-slate-800 min-h-screen flex flex-col font-sans antialiased">
+
+  <!-- Top Navbar -->
+  <header class="bg-white border-b border-slate-200 sticky top-0 z-30 shadow-xs">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 h-14 flex items-center justify-between gap-2">
+      
+      <!-- Brand & Title -->
+      <div class="flex items-center gap-3">
+        <div class="w-8 h-8 rounded-lg bg-blue-600 text-white flex items-center justify-center font-bold shrink-0">
+          <i data-lucide="landmark" class="w-4 h-4"></i>
+        </div>
+        <div class="flex items-center gap-2">
+          <span class="font-bold text-slate-900 tracking-tight text-sm sm:text-base whitespace-nowrap" id="headerTitle">CSP Balance Manager</span>
+          <button id="editCenterBtn" class="text-slate-400 hover:text-slate-600" title="Edit Shop Name">
+            <i data-lucide="edit-3" class="w-3.5 h-3.5"></i>
+          </button>
+        </div>
+      </div>
+
+      <!-- Center Tabs: Daily Hisab, Deposit, Kitna Baki / Diye -->
+      <nav class="flex items-center bg-slate-100 p-1 rounded-xl border border-slate-200/80">
+        <button
+          id="tabDailyHisab"
+          class="px-2.5 sm:px-3 py-1 rounded-lg text-xs font-bold transition flex items-center gap-1.5 bg-white text-blue-700 shadow-xs"
+        >
+          <i data-lucide="bar-chart-3" class="w-3.5 h-3.5"></i>
+          <span>Daily Hisab</span>
+        </button>
+
+        <button
+          id="tabDeposit"
+          class="px-2.5 sm:px-3 py-1 rounded-lg text-xs font-bold transition flex items-center gap-1.5 text-slate-600 hover:text-slate-900"
+        >
+          <i data-lucide="arrow-down-circle" class="w-3.5 h-3.5 text-emerald-600"></i>
+          <span>Deposit</span>
+          <span id="tabDepositBadge" class="px-1.5 py-0.2 rounded-full bg-emerald-100 text-emerald-800 text-[10px] font-bold">0</span>
+        </button>
+
+        <button
+          id="tabKitnaDiye"
+          class="px-2.5 sm:px-3 py-1 rounded-lg text-xs font-bold transition flex items-center gap-1.5 text-slate-600 hover:text-slate-900"
+        >
+          <i data-lucide="hand-coins" class="w-3.5 h-3.5 text-indigo-600"></i>
+          <span>Kitna Baki / Diye</span>
+          <span id="tabKitnaDiyeBadge" class="px-1.5 py-0.2 rounded-full bg-indigo-100 text-indigo-800 text-[10px] font-bold">0</span>
+        </button>
+      </nav>
+
+      <!-- Right Action Controls -->
+      <div class="flex items-center gap-1.5 sm:gap-2">
+        <!-- Master Date Selector -->
+        <input type="date" id="selectedDate" class="bg-slate-50 border border-slate-200 rounded-lg px-2 py-1 text-xs font-mono font-semibold text-slate-700 cursor-pointer focus:outline-none" />
+
+        <!-- History -->
+        <button id="openHistoryBtn" class="px-2.5 py-1 text-xs font-semibold rounded-lg border border-slate-200 hover:bg-slate-50 text-slate-700 transition flex items-center gap-1" title="View Saved History">
+          <i data-lucide="history" class="w-3.5 h-3.5 text-slate-500"></i>
+          <span class="hidden sm:inline">History</span>
+        </button>
+
+        <!-- Print -->
+        <button id="printReportBtn" class="px-2.5 sm:px-3 py-1 text-xs font-bold rounded-lg bg-blue-600 hover:bg-blue-700 text-white transition flex items-center gap-1 shadow-sm">
+          <i data-lucide="printer" class="w-3.5 h-3.5"></i>
+          <span>Print</span>
+        </button>
+      </div>
+
+    </div>
+  </header>
+
+  <!-- ========================================== -->
+  <!-- VIEW 1: DAILY HISAB & RECONCILIATION PAGE -->
+  <!-- ========================================== -->
+  <main id="viewDailyHisab" class="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6">
+
+    <div class="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
+
+      <!-- LEFT SIDE: INPUT SECTIONS (7 Cols) -->
+      <div class="lg:col-span-7 space-y-4">
+
+        <!-- 1. MORNING BALANCE -->
+        <div class="bg-white rounded-xl border border-slate-200 p-4 shadow-xs">
+          <div class="flex items-center justify-between mb-3 border-b border-slate-100 pb-2">
+            <div class="flex items-center gap-2">
+              <span class="w-6 h-6 rounded bg-amber-50 text-amber-600 flex items-center justify-center">
+                <i data-lucide="sun" class="w-3.5 h-3.5"></i>
+              </span>
+              <h2 class="text-sm font-bold text-slate-900 tracking-tight">Morning Balance (Opening)</h2>
+            </div>
+            <span class="text-[11px] font-mono font-bold text-amber-800 bg-amber-50 px-2 py-0.5 rounded border border-amber-200" id="subtotalMorningBadge">Total: ₹0</span>
+          </div>
+
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <!-- Account Morning Balance -->
+            <div>
+              <div class="flex items-center justify-between mb-1">
+                <label class="text-xs font-bold text-slate-700">Account Morning Balance</label>
+                <span class="text-[10px] text-blue-600 font-semibold uppercase">Portal (+)</span>
+              </div>
+              <div class="relative">
+                <span class="absolute inset-y-0 left-0 pl-3 flex items-center text-slate-400 font-bold text-sm">₹</span>
+                <input
+                  type="number"
+                  id="accountMorning"
+                  placeholder="0"
+                  step="any"
+                  class="w-full pl-7 pr-3 py-2 rounded-lg border border-slate-200 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 text-slate-900 font-mono text-base font-bold transition"
+                />
+              </div>
+            </div>
+
+            <!-- Morning Cash -->
+            <div>
+              <div class="flex items-center justify-between mb-1">
+                <label class="text-xs font-bold text-slate-700">Morning Cash</label>
+                <button type="button" id="openMorningDenomBtn" class="text-[10px] text-blue-600 hover:underline font-semibold flex items-center gap-0.5">
+                  <i data-lucide="calculator" class="w-3 h-3"></i>
+                  <span>Count Notes</span>
+                </button>
+              </div>
+              <div class="relative">
+                <span class="absolute inset-y-0 left-0 pl-3 flex items-center text-slate-400 font-bold text-sm">₹</span>
+                <input
+                  type="number"
+                  id="morningCash"
+                  placeholder="0"
+                  step="any"
+                  class="w-full pl-7 pr-3 py-2 rounded-lg border border-slate-200 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 text-slate-900 font-mono text-base font-bold transition"
+                />
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 2. DAY ADJUSTMENTS: PAYMENT DUE (ADD), UDHARI (SUBTRACT), HOME USE (SUBTRACT) -->
+        <div class="bg-white rounded-xl border border-slate-200 p-4 shadow-xs">
+          <div class="flex items-center justify-between mb-3 border-b border-slate-100 pb-2">
+            <div class="flex items-center gap-2">
+              <span class="w-6 h-6 rounded bg-slate-100 text-slate-700 flex items-center justify-center">
+                <i data-lucide="arrow-left-right" class="w-3.5 h-3.5"></i>
+              </span>
+              <h2 class="text-sm font-bold text-slate-900 tracking-tight">Day Adjustments</h2>
+            </div>
+          </div>
+
+          <div class="space-y-3">
+            
+            <!-- Payment Due (Amount to Pay / Paid) -> ADD (+) -->
+            <div>
+              <div class="flex items-center justify-between mb-1">
+                <label class="text-xs font-bold text-slate-700 flex items-center gap-1.5">
+                  <span class="px-1.5 py-0.2 rounded bg-emerald-100 text-emerald-800 text-[10px] font-bold">ADD (+)</span>
+                  <span>Payment Due (Amount to Pay / Paid)</span>
+                </label>
+                <span class="text-[10px] text-emerald-700 font-medium">Add in balance (+)</span>
+              </div>
+              <div class="relative">
+                <span class="absolute inset-y-0 left-0 pl-3 flex items-center text-emerald-600 font-bold text-sm">₹</span>
+                <input
+                  type="number"
+                  id="paymentDue"
+                  placeholder="0"
+                  step="any"
+                  class="w-full pl-7 pr-3 py-2 rounded-lg border border-emerald-200 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 text-slate-900 font-mono text-base font-bold transition"
+                />
+              </div>
+            </div>
+
+            <!-- Udhari (Udhar Given) -> SUBTRACT (-) -->
+            <div>
+              <div class="flex items-center justify-between mb-1">
+                <label class="text-xs font-bold text-slate-700 flex items-center gap-1.5">
+                  <span class="px-1.5 py-0.2 rounded bg-rose-100 text-rose-700 text-[10px] font-bold">SUBTRACT (-)</span>
+                  <span>Udhari (Udhar Diya / Given)</span>
+                </label>
+                <span class="text-[10px] text-rose-700 font-medium">Cash given on credit (-)</span>
+              </div>
+              <div class="relative">
+                <span class="absolute inset-y-0 left-0 pl-3 flex items-center text-rose-500 font-bold text-sm">₹</span>
+                <input
+                  type="number"
+                  id="udhari"
+                  placeholder="0"
+                  step="any"
+                  class="w-full pl-7 pr-3 py-2 rounded-lg border border-rose-200 focus:border-rose-500 focus:ring-1 focus:ring-rose-500 text-slate-900 font-mono text-base font-bold transition"
+                />
+              </div>
+            </div>
+
+            <!-- Home Use -> SUBTRACT (-) -->
+            <div>
+              <div class="flex items-center justify-between mb-1">
+                <label class="text-xs font-bold text-slate-700 flex items-center gap-1.5">
+                  <span class="px-1.5 py-0.2 rounded bg-amber-100 text-amber-700 text-[10px] font-bold">SUBTRACT (-)</span>
+                  <span>Home Use (Cash taken home)</span>
+                </label>
+                <span class="text-[10px] text-amber-700 font-medium">Personal cash (-)</span>
+              </div>
+              <div class="relative">
+                <span class="absolute inset-y-0 left-0 pl-3 flex items-center text-amber-500 font-bold text-sm">₹</span>
+                <input
+                  type="number"
+                  id="homeUse"
+                  placeholder="0"
+                  step="any"
+                  class="w-full pl-7 pr-3 py-2 rounded-lg border border-amber-200 focus:border-amber-500 focus:ring-1 focus:ring-amber-500 text-slate-900 font-mono text-base font-bold transition"
+                />
+              </div>
+            </div>
+
+          </div>
+        </div>
+
+        <!-- 3. NIGHT CLOSING BALANCE -->
+        <div class="bg-white rounded-xl border border-slate-200 p-4 shadow-xs">
+          <div class="flex items-center justify-between mb-3 border-b border-slate-100 pb-2">
+            <div class="flex items-center gap-2">
+              <span class="w-6 h-6 rounded bg-indigo-50 text-indigo-700 flex items-center justify-center">
+                <i data-lucide="moon" class="w-3.5 h-3.5"></i>
+              </span>
+              <h2 class="text-sm font-bold text-slate-900 tracking-tight">Night Closing Balance (Actual)</h2>
+            </div>
+            <span class="text-[11px] font-mono font-bold text-indigo-900 bg-indigo-50 px-2 py-0.5 rounded border border-indigo-200" id="subtotalNightBadge">Total: ₹0</span>
+          </div>
+
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <!-- Account Night Balance -->
+            <div>
+              <div class="flex items-center justify-between mb-1">
+                <label class="text-xs font-bold text-slate-700">Account Night Balance</label>
+                <span class="text-[10px] text-indigo-600 font-semibold uppercase">Portal</span>
+              </div>
+              <div class="relative">
+                <span class="absolute inset-y-0 left-0 pl-3 flex items-center text-slate-400 font-bold text-sm">₹</span>
+                <input
+                  type="number"
+                  id="accountNight"
+                  placeholder="0"
+                  step="any"
+                  class="w-full pl-7 pr-3 py-2 rounded-lg border border-slate-200 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 text-slate-900 font-mono text-base font-bold transition"
+                />
+              </div>
+            </div>
+
+            <!-- Cash Night -->
+            <div>
+              <div class="flex items-center justify-between mb-1">
+                <label class="text-xs font-bold text-slate-700">Cash Night</label>
+                <button type="button" id="openNightDenomBtn" class="text-[10px] text-indigo-600 hover:underline font-semibold flex items-center gap-0.5">
+                  <i data-lucide="calculator" class="w-3 h-3"></i>
+                  <span>Count Notes</span>
+                </button>
+              </div>
+              <div class="relative">
+                <span class="absolute inset-y-0 left-0 pl-3 flex items-center text-slate-400 font-bold text-sm">₹</span>
+                <input
+                  type="number"
+                  id="cashNight"
+                  placeholder="0"
+                  step="any"
+                  class="w-full pl-7 pr-3 py-2 rounded-lg border border-slate-200 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 text-slate-900 font-mono text-base font-bold transition"
+                />
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- FORM CONTROLS -->
+        <div class="flex items-center justify-between pt-1">
+          <button
+            type="button"
+            id="resetDayBtn"
+            class="px-3 py-2 rounded-lg border border-slate-200 hover:bg-slate-50 text-slate-600 text-xs font-semibold flex items-center gap-1.5 transition"
+          >
+            <i data-lucide="rotate-ccw" class="w-3.5 h-3.5"></i>
+            <span>Reset</span>
+          </button>
+
+          <div class="flex items-center gap-2">
+            <button
+              type="button"
+              id="fillDemoBtn"
+              class="px-3 py-2 text-xs font-semibold rounded-lg bg-indigo-50 text-indigo-700 hover:bg-indigo-100 transition"
+            >
+              Fill Sample
+            </button>
+
+            <button
+              type="button"
+              id="saveRecordBtn"
+              class="px-5 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs flex items-center gap-1.5 shadow-sm transition"
+            >
+              <i data-lucide="save" class="w-3.5 h-3.5"></i>
+              <span>Save Day Record</span>
+            </button>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- RIGHT SIDE: RECONCILIATION VERDICT (5 Cols) -->
+      <div class="lg:col-span-5 space-y-4 lg:sticky lg:top-20">
+
+        <!-- Final Status Verdict Card -->
+        <div id="verdictCard" class="bg-white rounded-xl border-2 border-slate-200 p-5 shadow-sm transition-all duration-300">
+          
+          <div class="flex items-center justify-between mb-4">
+            <span class="text-xs uppercase font-bold tracking-wider text-slate-400">Reconciliation Verdict</span>
+            <span id="verdictBadge" class="text-xs font-bold px-2.5 py-0.5 rounded-full bg-slate-100 text-slate-600">
+              No Data
+            </span>
+          </div>
+
+          <!-- Hero Status Banner -->
+          <div id="verdictHero" class="text-center py-5 px-3 rounded-xl bg-slate-50 border border-slate-100 mb-4 transition-colors">
+            <div id="verdictIconContainer" class="w-12 h-12 mx-auto rounded-full bg-slate-200 text-slate-500 flex items-center justify-center mb-2">
+              <i data-lucide="calculator" id="verdictIcon" class="w-6 h-6"></i>
+            </div>
+            
+            <h3 id="verdictTitle" class="text-lg font-black text-slate-800">
+              Enter Today's Numbers
+            </h3>
+            
+            <p id="verdictSubtitle" class="text-xs text-slate-500 mt-0.5">
+              Input morning balance, adjustments, and night balance.
+            </p>
+
+            <!-- Difference Box -->
+            <div id="diffAmountBox" class="mt-3 pt-3 border-t border-slate-200/60 hidden">
+              <div class="text-[11px] uppercase font-bold text-slate-400">Difference (Actual - Expected)</div>
+              <div id="diffAmountText" class="text-2xl font-black font-mono mt-0.5">₹0</div>
+            </div>
+          </div>
+
+          <!-- Crisp Math Summary -->
+          <div class="space-y-1.5 text-xs font-mono">
+            <div class="flex justify-between py-1.5 px-2.5 rounded bg-slate-50 text-slate-700">
+              <span class="font-sans text-slate-600">Morning Total (Acc + Cash):</span>
+              <span id="stepMorningTotal" class="font-bold">₹0</span>
+            </div>
+
+            <!-- (+) Payment Due -->
+            <div class="flex justify-between py-1.5 px-2.5 rounded bg-emerald-50 text-emerald-800">
+              <span class="font-sans text-emerald-700">(+) Payment Due:</span>
+              <span id="stepDue" class="font-bold">+₹0</span>
+            </div>
+
+            <!-- (-) Udhari Given -->
+            <div class="flex justify-between py-1.5 px-2.5 rounded bg-rose-50 text-rose-800">
+              <span class="font-sans text-rose-700">(-) Udhari Given:</span>
+              <span id="stepUdhari" class="font-bold">-₹0</span>
+            </div>
+
+            <!-- (-) Home Use -->
+            <div class="flex justify-between py-1.5 px-2.5 rounded bg-amber-50 text-amber-800">
+              <span class="font-sans text-amber-700">(-) Home Use:</span>
+              <span id="stepHome" class="font-bold">-₹0</span>
+            </div>
+
+            <div class="flex justify-between py-2 px-2.5 rounded bg-indigo-50 border border-indigo-100 text-indigo-900 font-bold">
+              <span class="font-sans text-indigo-800">Expected Closing:</span>
+              <span id="stepExpected" class="text-sm">₹0</span>
+            </div>
+
+            <div class="flex justify-between py-2 px-2.5 rounded bg-slate-100 border border-slate-200 text-slate-900 font-bold">
+              <span class="font-sans text-slate-800">Actual Closing (Acc + Cash):</span>
+              <span id="stepActual" class="text-sm">₹0</span>
+            </div>
+          </div>
+
+          <!-- Issue Diagnosis Line -->
+          <div id="diagnosisBox" class="mt-3 p-2.5 rounded-lg text-xs hidden"></div>
+
+        </div>
+
+        <!-- Formula Rule Card (Concise) -->
+        <div class="bg-white rounded-xl border border-slate-200 p-3.5 text-xs text-slate-600">
+          <div class="font-bold text-slate-800 mb-1 flex items-center gap-1.5">
+            <i data-lucide="info" class="w-3.5 h-3.5 text-blue-600"></i>
+            <span>Reconciliation Formula</span>
+          </div>
+          <div class="font-mono text-[11px] bg-slate-50 p-2 rounded border border-slate-100 text-slate-700 space-y-0.5">
+            <p><strong>Expected Closing</strong> = Morning Total + Payment Due - Udhari - Home Use</p>
+            <p><strong>Actual Closing</strong> = Account Night + Cash Night</p>
+            <p><strong>Difference</strong> = Actual Closing - Expected Closing</p>
+          </div>
+        </div>
+
+      </div>
+
+    </div>
+
+  </main>
+
+  <!-- ========================================== -->
+  <!-- VIEW 2: DEPOSIT SECTION (NEW)              -->
+  <!-- ========================================== -->
+  <main id="viewDeposit" class="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6 hidden">
+
+    <div class="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
+      
+      <!-- LEFT: NEW DEPOSIT ENTRY FORM (5 Cols) -->
+      <div class="lg:col-span-5 bg-white rounded-xl border border-slate-200 p-5 shadow-xs space-y-4">
+        
+        <div class="border-b border-slate-100 pb-3">
+          <div class="flex items-center gap-2">
+            <div class="w-8 h-8 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center font-bold">
+              <i data-lucide="arrow-down-circle" class="w-4 h-4"></i>
+            </div>
+            <div>
+              <h2 class="text-base font-bold text-slate-900">Customer Deposit (खाता में जमा)</h2>
+              <p class="text-xs text-slate-400">ग्राहक का खाता नंबर व जमा राशि दर्ज करें</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- Deposit Form: Name, Account No, Amount, Date of Payment -->
+        <form id="depositForm" class="space-y-4">
+          
+          <!-- Name of Customer -->
+          <div>
+            <label class="block text-xs font-bold text-slate-700 mb-1">
+              Name of Customer (ग्राहक का नाम) <span class="text-rose-500">*</span>
+            </label>
+            <div class="relative">
+              <span class="absolute inset-y-0 left-0 pl-3 flex items-center text-slate-400"><i data-lucide="user" class="w-3.5 h-3.5"></i></span>
+              <input
+                type="text"
+                id="depositCustomerName"
+                required
+                placeholder="उदा. Ramesh Kumar"
+                class="w-full pl-8 pr-3 py-2.5 rounded-lg border border-slate-200 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 text-sm font-semibold text-slate-900 transition"
+              />
+            </div>
+          </div>
+
+          <!-- Account Number -->
+          <div>
+            <label class="block text-xs font-bold text-slate-700 mb-1">
+              Account Number (खाता संख्या) <span class="text-rose-500">*</span>
+            </label>
+            <div class="relative">
+              <span class="absolute inset-y-0 left-0 pl-3 flex items-center text-slate-400"><i data-lucide="credit-card" class="w-3.5 h-3.5"></i></span>
+              <input
+                type="text"
+                id="depositAccountNumber"
+                required
+                placeholder="उदा. 34567890123"
+                class="w-full pl-8 pr-3 py-2.5 rounded-lg border border-slate-200 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 text-sm font-mono font-bold text-slate-900 transition"
+              />
+            </div>
+          </div>
+
+          <!-- Amount -->
+          <div>
+            <label class="block text-xs font-bold text-slate-700 mb-1">
+              Amount (जमा राशि) <span class="text-rose-500">*</span>
+            </label>
+            <div class="relative">
+              <span class="absolute inset-y-0 left-0 pl-3 flex items-center text-emerald-600 font-bold text-sm">₹</span>
+              <input
+                type="number"
+                id="depositAmount"
+                required
+                min="1"
+                placeholder="0"
+                class="w-full pl-8 pr-3 py-2.5 rounded-lg border border-slate-200 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 text-base font-mono font-bold text-slate-900 transition"
+              />
+            </div>
+          </div>
+
+          <!-- Date of Payment -->
+          <div>
+            <label class="block text-xs font-bold text-slate-700 mb-1">
+              Date of Payment (भुगतान की तारीख) <span class="text-rose-500">*</span>
+            </label>
+            <div class="relative">
+              <span class="absolute inset-y-0 left-0 pl-3 flex items-center text-slate-400"><i data-lucide="calendar" class="w-3.5 h-3.5"></i></span>
+              <input
+                type="date"
+                id="depositPaymentDate"
+                required
+                class="w-full pl-8 pr-3 py-2.5 rounded-lg border border-slate-200 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 text-sm font-semibold text-slate-900 transition"
+              />
+            </div>
+          </div>
+
+          <!-- Submit Button -->
+          <div class="pt-2">
+            <button
+              type="submit"
+              class="w-full py-2.5 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs sm:text-sm shadow-md shadow-emerald-600/20 flex items-center justify-center gap-2 transition"
+            >
+              <i data-lucide="check-circle" class="w-4 h-4"></i>
+              <span>Save Deposit (जमा दर्ज करें)</span>
+            </button>
+          </div>
+
+        </form>
+
+      </div>
+
+      <!-- RIGHT: DEPOSIT LEDGER WITH DATE-WISE FILTER & STEP MODIFICATION (7 Cols) -->
+      <div class="lg:col-span-7 space-y-4">
+
+        <!-- Top Summary Cards -->
+        <div class="grid grid-cols-2 gap-3">
+          <div class="bg-white rounded-xl border border-slate-200 p-3.5 shadow-xs">
+            <div class="text-[11px] uppercase font-bold text-slate-400">Total Deposited (कुल जमा)</div>
+            <div id="depositSummaryTotal" class="text-2xl font-black font-mono text-emerald-700 mt-0.5">₹0</div>
+          </div>
+
+          <div class="bg-white rounded-xl border border-slate-200 p-3.5 shadow-xs">
+            <div class="text-[11px] uppercase font-bold text-slate-400">Deposit Transactions</div>
+            <div id="depositSummaryCount" class="text-2xl font-black font-mono text-slate-800 mt-0.5">0</div>
+          </div>
+        </div>
+
+        <!-- Filter Bar: Date-wise Filter & Search -->
+        <div class="bg-white rounded-xl border border-slate-200 p-3 shadow-xs space-y-2">
+          
+          <div class="flex flex-wrap items-center justify-between gap-2">
+            <!-- Date Filter Picker -->
+            <div class="flex items-center gap-1.5">
+              <span class="text-xs font-bold text-slate-600 flex items-center gap-1">
+                <i data-lucide="filter" class="w-3.5 h-3.5 text-slate-400"></i>
+                <span>Date Filter:</span>
+              </span>
+              <input
+                type="date"
+                id="depositFilterDate"
+                class="px-2 py-1 bg-slate-50 border border-slate-200 rounded-lg text-xs font-mono font-semibold text-slate-800 cursor-pointer"
+              />
+              <button id="depositFilterTodayBtn" class="px-2 py-1 text-xs font-semibold rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700">Today</button>
+              <button id="depositFilterAllBtn" class="px-2 py-1 text-xs font-semibold rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700">All</button>
+            </div>
+
+            <!-- Export CSV -->
+            <button id="exportDepositsCsvBtn" class="px-2.5 py-1 rounded-lg border border-slate-200 text-xs font-semibold hover:bg-slate-50 text-slate-700 flex items-center gap-1 transition">
+              <i data-lucide="download" class="w-3.5 h-3.5 text-blue-600"></i>
+              <span>Export CSV</span>
+            </button>
+          </div>
+
+          <!-- Search Input -->
+          <div class="relative">
+            <span class="absolute inset-y-0 left-0 pl-2.5 flex items-center text-slate-400"><i data-lucide="search" class="w-3.5 h-3.5"></i></span>
+            <input
+              type="text"
+              id="depositSearchInput"
+              placeholder="Search by customer name or account number..."
+              class="w-full pl-8 pr-3 py-1.5 rounded-lg border border-slate-200 text-xs focus:outline-none focus:border-emerald-500"
+            />
+          </div>
+
+        </div>
+
+        <!-- Deposits Records List Container -->
+        <div id="depositsListContainer" class="space-y-2.5 max-h-[600px] overflow-y-auto">
+          <!-- Dynamically populated via JS -->
+        </div>
+
+      </div>
+
+    </div>
+
+  </main>
+
+  <!-- ========================================== -->
+  <!-- VIEW 3: KITNA BAKI / DIYE LEDGER PAGE      -->
+  <!-- ========================================== -->
+  <main id="viewKitnaDiye" class="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6 hidden">
+
+    <div class="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
+      
+      <!-- LEFT: NEW PAYOUT ENTRY FORM (5 Cols) -->
+      <div class="lg:col-span-5 bg-white rounded-xl border border-slate-200 p-5 shadow-xs space-y-4">
+        
+        <div class="border-b border-slate-100 pb-3">
+          <div class="flex items-center gap-2">
+            <div class="w-8 h-8 rounded-lg bg-indigo-50 text-indigo-600 flex items-center justify-center font-bold">
+              <i data-lucide="hand-coins" class="w-4 h-4"></i>
+            </div>
+            <div>
+              <h2 class="text-base font-bold text-slate-900">Kitna Baki / Diye (नकद दिया रिकॉर्ड)</h2>
+              <p class="text-xs text-slate-400">ग्राहक को दी गई नकद रकम दर्ज करें</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- Entry Form (Name, Amount, Mobile) -->
+        <form id="payoutForm" class="space-y-4">
+          
+          <!-- Customer Name -->
+          <div>
+            <label class="block text-xs font-bold text-slate-700 mb-1">
+              Customer Name (ग्राहक का नाम) <span class="text-rose-500">*</span>
+            </label>
+            <div class="relative">
+              <span class="absolute inset-y-0 left-0 pl-3 flex items-center text-slate-400"><i data-lucide="user" class="w-3.5 h-3.5"></i></span>
+              <input
+                type="text"
+                id="payoutName"
+                required
+                placeholder="उदा. Ramesh Kumar"
+                class="w-full pl-8 pr-3 py-2.5 rounded-lg border border-slate-200 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 text-sm font-semibold text-slate-900 transition"
+              />
+            </div>
+          </div>
+
+          <!-- Amount -->
+          <div>
+            <label class="block text-xs font-bold text-slate-700 mb-1">
+              Amount Given (रुपये कितना दिए) <span class="text-rose-500">*</span>
+            </label>
+            <div class="relative">
+              <span class="absolute inset-y-0 left-0 pl-3 flex items-center text-indigo-600 font-bold text-sm">₹</span>
+              <input
+                type="number"
+                id="payoutAmount"
+                required
+                min="1"
+                placeholder="0"
+                class="w-full pl-8 pr-3 py-2.5 rounded-lg border border-slate-200 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 text-base font-mono font-bold text-slate-900 transition"
+              />
+            </div>
+          </div>
+
+          <!-- Mobile Number -->
+          <div>
+            <label class="block text-xs font-bold text-slate-700 mb-1 flex items-center justify-between">
+              <span>Mobile Number (मोबाइल नंबर)</span>
+              <span class="text-[10px] text-slate-400">WhatsApp Confirmation</span>
+            </label>
+            <div class="relative">
+              <span class="absolute inset-y-0 left-0 pl-3 flex items-center text-slate-400 text-xs font-semibold">+91</span>
+              <input
+                type="tel"
+                id="payoutMobile"
+                placeholder="10-digit number (उदा. 9876543210)"
+                maxlength="10"
+                class="w-full pl-11 pr-3 py-2.5 rounded-lg border border-slate-200 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 text-sm font-mono font-semibold text-slate-900 transition"
+              />
+            </div>
+          </div>
+
+          <!-- Submit Button -->
+          <div class="pt-2">
+            <button
+              type="submit"
+              class="w-full py-2.5 px-4 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs sm:text-sm shadow-md shadow-indigo-600/20 flex items-center justify-center gap-2 transition"
+            >
+              <i data-lucide="check-circle" class="w-4 h-4"></i>
+              <span>Save & Get Confirmation (दर्ज करें)</span>
+            </button>
+          </div>
+
+        </form>
+
+      </div>
+
+      <!-- RIGHT: PAYOUT ENTRIES LIST WITH DATE FILTER & STEP MODIFICATION (7 Cols) -->
+      <div class="lg:col-span-7 space-y-4">
+
+        <!-- Top Summary Cards -->
+        <div class="grid grid-cols-2 gap-3">
+          <div class="bg-white rounded-xl border border-slate-200 p-3.5 shadow-xs">
+            <div class="text-[11px] uppercase font-bold text-slate-400">Total Given (कुल दिया)</div>
+            <div id="payoutSummaryTotal" class="text-2xl font-black font-mono text-indigo-700 mt-0.5">₹0</div>
+          </div>
+
+          <div class="bg-white rounded-xl border border-slate-200 p-3.5 shadow-xs">
+            <div class="text-[11px] uppercase font-bold text-slate-400">Total People (कुल ग्राहक)</div>
+            <div id="payoutSummaryCount" class="text-2xl font-black font-mono text-slate-800 mt-0.5">0</div>
+          </div>
+        </div>
+
+        <!-- Filter Bar: Date-wise Filter & Search -->
+        <div class="bg-white rounded-xl border border-slate-200 p-3 shadow-xs space-y-2">
+          
+          <div class="flex flex-wrap items-center justify-between gap-2">
+            <!-- Date Filter Picker -->
+            <div class="flex items-center gap-1.5">
+              <span class="text-xs font-bold text-slate-600 flex items-center gap-1">
+                <i data-lucide="filter" class="w-3.5 h-3.5 text-slate-400"></i>
+                <span>Date Filter:</span>
+              </span>
+              <input
+                type="date"
+                id="payoutFilterDate"
+                class="px-2 py-1 bg-slate-50 border border-slate-200 rounded-lg text-xs font-mono font-semibold text-slate-800 cursor-pointer"
+              />
+              <button id="payoutFilterTodayBtn" class="px-2 py-1 text-xs font-semibold rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700">Today</button>
+              <button id="payoutFilterAllBtn" class="px-2 py-1 text-xs font-semibold rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700">All</button>
+            </div>
+
+            <!-- Export CSV -->
+            <button id="exportPayoutsCsvBtn" class="px-2.5 py-1 rounded-lg border border-slate-200 text-xs font-semibold hover:bg-slate-50 text-slate-700 flex items-center gap-1 transition">
+              <i data-lucide="download" class="w-3.5 h-3.5 text-blue-600"></i>
+              <span>Export CSV</span>
+            </button>
+          </div>
+
+          <!-- Search Input -->
+          <div class="relative">
+            <span class="absolute inset-y-0 left-0 pl-2.5 flex items-center text-slate-400"><i data-lucide="search" class="w-3.5 h-3.5"></i></span>
+            <input
+              type="text"
+              id="searchPayoutInput"
+              placeholder="Search by customer name or phone..."
+              class="w-full pl-8 pr-3 py-1.5 rounded-lg border border-slate-200 text-xs focus:outline-none focus:border-indigo-500"
+            />
+          </div>
+
+        </div>
+
+        <!-- Payout Records List Container -->
+        <div id="payoutsListContainer" class="space-y-2.5 max-h-[600px] overflow-y-auto">
+          <!-- Dynamically populated via JS -->
+        </div>
+
+      </div>
+
+    </div>
+
+  </main>
+
+  <!-- ========================================== -->
+  <!-- MODAL: MODIFY AMOUNT & STEP HISTORY TRACKER -->
+  <!-- ========================================== -->
+  <div id="modifyModal" class="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 hidden">
+    <div class="bg-white rounded-2xl max-w-md w-full overflow-hidden shadow-2xl border border-slate-200 animate-pop">
+      
+      <!-- Modal Header -->
+      <div class="px-5 py-3.5 bg-slate-900 text-white flex items-center justify-between">
+        <div class="flex items-center gap-2">
+          <i data-lucide="history" class="w-4 h-4 text-indigo-400"></i>
+          <h3 class="font-bold text-sm">Modify Amount (रकम बदलें व स्टेप्स रिकॉर्ड करें)</h3>
+        </div>
+        <button id="closeModifyModal" class="text-slate-400 hover:text-white">
+          <i data-lucide="x" class="w-4 h-4"></i>
+        </button>
+      </div>
+
+      <div class="p-5 space-y-4 max-h-[80vh] overflow-y-auto">
+        
+        <!-- Entry Overview Card -->
+        <div class="p-3 bg-slate-50 rounded-xl border border-slate-200 text-xs space-y-1">
+          <div class="flex justify-between">
+            <span class="text-slate-500">Customer Name:</span>
+            <strong class="text-slate-900" id="modifyModalCustomerName">-</strong>
+          </div>
+          <div class="flex justify-between">
+            <span class="text-slate-500" id="modifyModalAccountOrMobileLabel">Account / Mobile:</span>
+            <span class="font-mono font-bold text-slate-800" id="modifyModalAccountOrMobile">-</span>
+          </div>
+          <div class="flex justify-between border-t border-slate-200/60 pt-1 mt-1">
+            <span class="text-slate-500">Current Amount:</span>
+            <strong class="font-mono font-black text-indigo-700 text-sm" id="modifyModalCurrentAmount">₹0</strong>
+          </div>
+        </div>
+
+        <!-- Modification Input Form -->
+        <div class="space-y-3">
+          <div>
+            <label class="block text-xs font-bold text-slate-700 mb-1">
+              New Revised Amount (नई रकम दर्ज करें) <span class="text-rose-500">*</span>
+            </label>
+            <div class="relative">
+              <span class="absolute inset-y-0 left-0 pl-3 flex items-center text-slate-400 font-bold text-sm">₹</span>
+              <input
+                type="number"
+                id="modifyNewAmountInput"
+                required
+                min="0"
+                placeholder="0"
+                class="w-full pl-7 pr-3 py-2 rounded-lg border border-slate-200 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 font-mono text-base font-bold text-slate-900"
+              />
+            </div>
+          </div>
+
+          <div>
+            <label class="block text-xs font-bold text-slate-700 mb-1">
+              Reason / Note for Change (संशोधन का कारण)
+            </label>
+            <input
+              type="text"
+              id="modifyReasonInput"
+              placeholder="उदा. ग्राहक ने ₹500 और दिया / टाइपिंग गलती सुधारी"
+              class="w-full px-3 py-2 rounded-lg border border-slate-200 text-xs focus:border-indigo-500 focus:outline-none"
+            />
+          </div>
+        </div>
+
+        <!-- Step History Timeline -->
+        <div>
+          <h4 class="text-xs font-bold uppercase tracking-wider text-slate-500 mb-2 flex items-center gap-1.5">
+            <i data-lucide="layers" class="w-3.5 h-3.5"></i>
+            <span>All Steps History (सभी पिछले स्टेप्स):</span>
+          </h4>
+          
+          <div class="pl-5 border-l-2 border-indigo-200 space-y-3" id="modifyStepsTimelineContainer">
+            <!-- Dynamically populated via JS -->
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Footer Buttons -->
+      <div class="px-5 py-3 bg-slate-50 border-t border-slate-100 flex justify-end gap-2">
+        <button id="cancelModifyBtn" class="px-3 py-1.5 rounded-lg text-xs font-semibold text-slate-600 hover:bg-slate-200 transition">
+          Cancel
+        </button>
+        <button id="saveModifyBtn" class="px-4 py-1.5 rounded-lg text-xs font-bold bg-indigo-600 hover:bg-indigo-700 text-white flex items-center gap-1 shadow-sm transition">
+          <i data-lucide="check" class="w-3.5 h-3.5"></i>
+          <span>Save Step & Update Amount</span>
+        </button>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ========================================== -->
+  <!-- MODAL: DEPOSIT CONFIRMATION               -->
+  <!-- ========================================== -->
+  <div id="confirmDepositModal" class="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 hidden">
+    <div class="bg-white rounded-2xl max-w-sm w-full overflow-hidden shadow-2xl border border-slate-200 animate-pop">
+      
+      <div class="bg-gradient-to-b from-emerald-50 to-white px-6 pt-6 pb-4 text-center">
+        <div class="w-14 h-14 mx-auto rounded-full bg-emerald-500 text-white flex items-center justify-center shadow-lg shadow-emerald-500/30 mb-2">
+          <i data-lucide="check" class="w-8 h-8 stroke-[3]"></i>
+        </div>
+        <h3 class="text-lg font-black text-slate-900">Deposit Recorded!</h3>
+        <p class="text-xs text-slate-500 mt-0.5">खाता जमा सफलतापूर्वक दर्ज हो गया है।</p>
+      </div>
+
+      <div class="px-6 py-3 bg-slate-50 border-y border-slate-100 space-y-2 text-xs font-mono">
+        <div class="flex justify-between text-slate-500">
+          <span>Customer:</span>
+          <strong class="text-slate-900 font-sans" id="confirmDepositCustomerName">-</strong>
+        </div>
+        <div class="flex justify-between text-slate-500">
+          <span>Account No:</span>
+          <strong class="text-slate-800" id="confirmDepositAccountNumber">-</strong>
+        </div>
+        <div class="flex justify-between text-slate-500">
+          <span>Amount:</span>
+          <strong class="text-emerald-700 text-base" id="confirmDepositAmount">₹0</strong>
+        </div>
+        <div class="flex justify-between text-slate-500">
+          <span>Date of Payment:</span>
+          <span class="text-slate-600" id="confirmDepositPaymentDate">-</span>
+        </div>
+      </div>
+
+      <div class="p-5 space-y-2">
+        <button
+          type="button"
+          id="confirmPrintDepositReceiptBtn"
+          class="w-full py-2.5 px-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs sm:text-sm flex items-center justify-center gap-1.5 shadow-md shadow-emerald-600/20 transition"
+        >
+          <i data-lucide="printer" class="w-4 h-4"></i>
+          <span>Print Deposit Receipt</span>
+        </button>
+
+        <button
+          type="button"
+          id="confirmCloseDepositModalBtn"
+          class="w-full py-2 text-center text-xs font-semibold text-slate-500 hover:text-slate-800 transition"
+        >
+          Close (बंद करें)
+        </button>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ========================================== -->
+  <!-- MODAL: KITNA DIYE ENTRY CONFIRMATION       -->
+  <!-- ========================================== -->
+  <div id="confirmEntryModal" class="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 hidden">
+    <div class="bg-white rounded-2xl max-w-sm w-full overflow-hidden shadow-2xl border border-slate-200 animate-pop">
+      
+      <div class="bg-gradient-to-b from-indigo-50 to-white px-6 pt-6 pb-4 text-center">
+        <div class="w-14 h-14 mx-auto rounded-full bg-indigo-600 text-white flex items-center justify-center shadow-lg shadow-indigo-600/30 mb-2">
+          <i data-lucide="check" class="w-8 h-8 stroke-[3]"></i>
+        </div>
+        <h3 class="text-lg font-black text-slate-900">Payment Confirmed!</h3>
+        <p class="text-xs text-slate-500 mt-0.5">रकम सफलतापूर्वक दर्ज हो गई है।</p>
+      </div>
+
+      <div class="px-6 py-3 bg-slate-50 border-y border-slate-100 space-y-2 text-xs font-mono">
+        <div class="flex justify-between text-slate-500">
+          <span>Customer:</span>
+          <strong class="text-slate-900 font-sans" id="confirmCustomerName">-</strong>
+        </div>
+        <div class="flex justify-between text-slate-500">
+          <span>Amount Given:</span>
+          <strong class="text-indigo-700 text-base" id="confirmCustomerAmount">₹0</strong>
+        </div>
+        <div class="flex justify-between text-slate-500">
+          <span>Mobile:</span>
+          <strong class="text-slate-800" id="confirmCustomerMobile">-</strong>
+        </div>
+        <div class="flex justify-between text-slate-500">
+          <span>Date & Time:</span>
+          <span class="text-slate-600" id="confirmCustomerTime">-</span>
+        </div>
+      </div>
+
+      <div class="p-5 space-y-2.5">
+        <button
+          type="button"
+          id="confirmSendWhatsAppBtn"
+          class="w-full py-2.5 px-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs sm:text-sm flex items-center justify-center gap-2 shadow-md shadow-emerald-600/20 transition"
+        >
+          <i data-lucide="message-circle" class="w-4 h-4"></i>
+          <span>Send WhatsApp Receipt</span>
+        </button>
+
+        <button
+          type="button"
+          id="confirmPrintReceiptBtn"
+          class="w-full py-2 px-3 rounded-xl border border-slate-200 hover:bg-slate-50 text-slate-700 font-semibold text-xs flex items-center justify-center gap-1.5 transition"
+        >
+          <i data-lucide="printer" class="w-3.5 h-3.5"></i>
+          <span>Print Receipt</span>
+        </button>
+
+        <button
+          type="button"
+          id="confirmCloseModalBtn"
+          class="w-full py-2 text-center text-xs font-semibold text-slate-500 hover:text-slate-800 transition"
+        >
+          Close (बंद करें)
+        </button>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- CASH DENOMINATION MODAL -->
+  <div id="denomModal" class="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4 hidden">
+    <div class="bg-white rounded-xl max-w-md w-full overflow-hidden shadow-xl border border-slate-200">
+      <div class="px-4 py-3 bg-slate-900 text-white flex items-center justify-between">
+        <h3 id="denomModalTitle" class="font-bold text-sm">Cash Denomination Counter</h3>
+        <button id="closeDenomModal" class="text-slate-400 hover:text-white">
+          <i data-lucide="x" class="w-4 h-4"></i>
+        </button>
+      </div>
+
+      <div class="p-4 space-y-2 text-xs">
+        <div class="grid grid-cols-12 items-center gap-2">
+          <span class="col-span-3 font-bold text-slate-700">₹ 500</span>
+          <span class="col-span-1 text-center text-slate-400">×</span>
+          <div class="col-span-4"><input type="number" min="0" data-note="500" class="denom-input w-full p-1.5 rounded border border-slate-200 text-center font-mono font-bold" placeholder="0" /></div>
+          <span class="col-span-4 text-right font-mono font-bold text-slate-900 denom-subtotal" data-note="500">= ₹ 0</span>
+        </div>
+
+        <div class="grid grid-cols-12 items-center gap-2">
+          <span class="col-span-3 font-bold text-slate-700">₹ 200</span>
+          <span class="col-span-1 text-center text-slate-400">×</span>
+          <div class="col-span-4"><input type="number" min="0" data-note="200" class="denom-input w-full p-1.5 rounded border border-slate-200 text-center font-mono font-bold" placeholder="0" /></div>
+          <span class="col-span-4 text-right font-mono font-bold text-slate-900 denom-subtotal" data-note="200">= ₹ 0</span>
+        </div>
+
+        <div class="grid grid-cols-12 items-center gap-2">
+          <span class="col-span-3 font-bold text-slate-700">₹ 100</span>
+          <span class="col-span-1 text-center text-slate-400">×</span>
+          <div class="col-span-4"><input type="number" min="0" data-note="100" class="denom-input w-full p-1.5 rounded border border-slate-200 text-center font-mono font-bold" placeholder="0" /></div>
+          <span class="col-span-4 text-right font-mono font-bold text-slate-900 denom-subtotal" data-note="100">= ₹ 0</span>
+        </div>
+
+        <div class="grid grid-cols-12 items-center gap-2">
+          <span class="col-span-3 font-bold text-slate-700">₹ 50</span>
+          <span class="col-span-1 text-center text-slate-400">×</span>
+          <div class="col-span-4"><input type="number" min="0" data-note="50" class="denom-input w-full p-1.5 rounded border border-slate-200 text-center font-mono font-bold" placeholder="0" /></div>
+          <span class="col-span-4 text-right font-mono font-bold text-slate-900 denom-subtotal" data-note="50">= ₹ 0</span>
+        </div>
+
+        <div class="grid grid-cols-12 items-center gap-2">
+          <span class="col-span-3 font-bold text-slate-700">₹ 20</span>
+          <span class="col-span-1 text-center text-slate-400">×</span>
+          <div class="col-span-4"><input type="number" min="0" data-note="20" class="denom-input w-full p-1.5 rounded border border-slate-200 text-center font-mono font-bold" placeholder="0" /></div>
+          <span class="col-span-4 text-right font-mono font-bold text-slate-900 denom-subtotal" data-note="20">= ₹ 0</span>
+        </div>
+
+        <div class="grid grid-cols-12 items-center gap-2">
+          <span class="col-span-3 font-bold text-slate-700">₹ 10</span>
+          <span class="col-span-1 text-center text-slate-400">×</span>
+          <div class="col-span-4"><input type="number" min="0" data-note="10" class="denom-input w-full p-1.5 rounded border border-slate-200 text-center font-mono font-bold" placeholder="0" /></div>
+          <span class="col-span-4 text-right font-mono font-bold text-slate-900 denom-subtotal" data-note="10">= ₹ 0</span>
+        </div>
+
+        <div class="grid grid-cols-12 items-center gap-2">
+          <span class="col-span-3 font-bold text-slate-700">Coins</span>
+          <span class="col-span-1 text-center text-slate-400">+</span>
+          <div class="col-span-4"><input type="number" min="0" id="denomCoins" class="w-full p-1.5 rounded border border-slate-200 text-center font-mono font-bold" placeholder="0" /></div>
+          <span class="col-span-4 text-right font-mono font-bold text-slate-900" id="denomCoinsSubtotal">= ₹ 0</span>
+        </div>
+
+        <div class="pt-3 border-t border-slate-200 flex justify-between items-center font-bold">
+          <span class="text-slate-700">Total Cash:</span>
+          <span id="denomGrandTotal" class="text-base text-emerald-700 font-mono">₹ 0</span>
+        </div>
+      </div>
+
+      <div class="px-4 py-2.5 bg-slate-50 border-t border-slate-100 flex justify-between items-center">
+        <button id="clearDenomBtn" class="text-xs text-rose-600 hover:underline">Reset</button>
+        <button id="applyDenomBtn" class="px-3 py-1.5 bg-blue-600 text-white rounded text-xs font-bold shadow-xs">Apply Cash</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- HISTORY MODAL -->
+  <div id="historyModal" class="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4 hidden">
+    <div class="bg-white rounded-xl max-w-lg w-full max-h-[80vh] flex flex-col overflow-hidden shadow-xl border border-slate-200">
+      <div class="px-4 py-3 bg-slate-900 text-white flex items-center justify-between">
+        <h3 class="font-bold text-sm">Past Day Records</h3>
+        <button id="closeHistoryModal" class="text-slate-400 hover:text-white">
+          <i data-lucide="x" class="w-4 h-4"></i>
+        </button>
+      </div>
+      <div class="px-4 py-2 bg-slate-50 border-b border-slate-100 flex justify-between items-center text-xs">
+        <span class="text-slate-500">Saved Days: <strong id="historyCountBadge" class="text-slate-800">0</strong></span>
+        <button id="clearAllHistoryBtn" class="text-rose-600 hover:underline">Clear History</button>
+      </div>
+      <div id="historyListContainer" class="p-4 overflow-y-auto space-y-2 flex-1"></div>
+    </div>
+  </div>
+
+  <!-- CENTER NAME MODAL -->
+  <div id="centerModal" class="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4 hidden">
+    <div class="bg-white rounded-xl max-w-xs w-full overflow-hidden shadow-xl border border-slate-200 p-4 space-y-3">
+      <h3 class="font-bold text-sm text-slate-800">CSP / Shop Name</h3>
+      <input type="text" id="settingCenterName" class="w-full p-2 border border-slate-200 rounded text-xs font-semibold" placeholder="e.g. My CSP Center" />
+      <div class="flex justify-end gap-2 pt-1">
+        <button id="cancelCenterBtn" class="px-2.5 py-1 text-xs text-slate-600">Cancel</button>
+        <button id="saveCenterBtn" class="px-3 py-1 bg-blue-600 text-white rounded text-xs font-bold">Save</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- PRINT SLIP (DAILY RECONCILIATION) -->
+  <div id="printableSlip" class="hidden">
+    <div class="text-center pb-2 border-b-2 border-black">
+      <h2 class="text-base font-bold uppercase" id="slipCenterName">CSP DAILY SETTLEMENT</h2>
+      <p class="text-xs font-mono" id="slipDate"></p>
+    </div>
+    <div class="py-2 space-y-1 text-xs">
+      <div class="flex justify-between"><span>Account Morning:</span><span id="slipAccountMorning" class="font-mono">0.00</span></div>
+      <div class="flex justify-between"><span>Morning Cash:</span><span id="slipMorningCash" class="font-mono">0.00</span></div>
+      <div class="flex justify-between font-bold bg-gray-100 p-1"><span>TOTAL MORNING:</span><span id="slipTotalMorning" class="font-mono">0.00</span></div>
+      
+      <!-- (+) Payment Due -->
+      <div class="flex justify-between text-green-700"><span>(+) Payment Due:</span><span id="slipDue" class="font-mono">+0.00</span></div>
+
+      <!-- (-) Udhari Given -->
+      <div class="flex justify-between text-red-700"><span>(-) Udhari Given:</span><span id="slipUdhari" class="font-mono">-0.00</span></div>
+      
+      <!-- (-) Home Use -->
+      <div class="flex justify-between text-red-700"><span>(-) Home Use:</span><span id="slipHome" class="font-mono">-0.00</span></div>
+
+      <div class="flex justify-between font-bold bg-gray-200 p-1 border-t border-b border-black"><span>EXPECTED CLOSING:</span><span id="slipExpected" class="font-mono">0.00</span></div>
+      
+      <div class="flex justify-between"><span>Account Night:</span><span id="slipAccountNight" class="font-mono">0.00</span></div>
+      <div class="flex justify-between"><span>Cash Night:</span><span id="slipCashNight" class="font-mono">0.00</span></div>
+      <div class="flex justify-between font-bold bg-gray-100 p-1"><span>ACTUAL CLOSING:</span><span id="slipActual" class="font-mono">0.00</span></div>
+      
+      <div class="border-t-2 border-black my-2"></div>
+      <div class="p-2 border border-black text-center" id="slipVerdictBox">
+        <p class="font-bold text-xs uppercase" id="slipVerdictTitle">PERFECT</p>
+        <p class="text-xs font-mono font-bold" id="slipDiffAmount">DIFFERENCE: ₹ 0.00</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- PRINTABLE RECEIPT (FOR DEPOSIT & PAYOUT) -->
+  <div id="printableReceipt" class="hidden">
+    <div class="text-center pb-2 border-b-2 border-black">
+      <h2 class="text-base font-bold uppercase" id="receiptCenterName">PAYMENT RECEIPT</h2>
+      <p class="text-xs font-mono" id="receiptDate"></p>
+    </div>
+    <div class="py-3 space-y-1.5 text-xs">
+      <div class="flex justify-between"><span>Type:</span><strong id="receiptType">RECEIPT</strong></div>
+      <div class="flex justify-between"><span>Customer Name:</span><strong id="receiptCustomerName">-</strong></div>
+      <div class="flex justify-between"><span id="receiptAccountOrMobileLabel">Account / Mobile:</span><span id="receiptCustomerAccountOrMobile" class="font-mono">-</span></div>
+      <div class="border-t border-dashed border-gray-400 my-1"></div>
+      <div class="flex justify-between text-base font-bold">
+        <span>AMOUNT:</span>
+        <span id="receiptCustomerAmount" class="font-mono">₹ 0.00</span>
+      </div>
+      <div class="border-t border-dashed border-gray-400 my-1"></div>
+      <p class="text-center text-[10px] text-gray-500 pt-2">Thank you! Please keep this receipt for your records.</p>
+    </div>
+  </div>
+
+  <!-- Toast -->
+  <div id="toast" class="fixed bottom-4 right-4 z-50 bg-slate-900 text-white px-3 py-2 rounded-lg text-xs font-medium opacity-0 pointer-events-none transition-all duration-300">
+    <span id="toastMsg">Saved</span>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>

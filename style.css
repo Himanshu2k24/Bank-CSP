@@ -1,0 +1,99 @@
+/* Custom Styles & Print Sheet for CSP Daily Transaction App */
+
+/* =======================================================
+   1. REMOVE ALL INCREMENT AND DECREMENT BUTTONS / SPINNERS
+   ======================================================= */
+/* Chrome, Safari, Edge, Opera */
+input[type=number]::-webkit-inner-spin-button, 
+input[type=number]::-webkit-outer-spin-button { 
+  -webkit-appearance: none !important;
+  appearance: none !important;
+  margin: 0 !important;
+  display: none !important;
+}
+
+/* Firefox */
+input[type=number] {
+  -moz-appearance: textfield !important;
+  appearance: textfield !important;
+}
+
+/* =======================================================
+   2. PRINT STYLES (Thermal / A4 Slip Format)
+   ======================================================= */
+@media print {
+  /* Hide all main interactive UI when printing */
+  body * {
+    visibility: hidden;
+  }
+
+  /* Show only printable slip or receipt */
+  #printableSlip, #printableSlip *,
+  #printableReceipt, #printableReceipt * {
+    visibility: visible;
+  }
+
+  #printableSlip, #printableReceipt {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    max-width: 420px;
+    margin: 0 auto;
+    padding: 15px;
+    background: white;
+    color: black;
+    font-family: 'Courier New', Courier, monospace, sans-serif;
+    display: block !important;
+  }
+
+  header, main, footer, .modal, #denomModal, #historyModal, #centerModal, #confirmEntryModal, #confirmDepositModal, #modifyModal, #toast {
+    display: none !important;
+  }
+}
+
+/* Custom Scrollbars */
+::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+::-webkit-scrollbar-track {
+  background: #f1f5f9;
+}
+::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 9999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
+
+/* Card Glows */
+.verdict-perfect {
+  background: linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%) !important;
+  border-color: #22c55e !important;
+}
+
+.verdict-shortage {
+  background: linear-gradient(135deg, #fff1f2 0%, #ffe4e6 100%) !important;
+  border-color: #f43f5e !important;
+}
+
+.verdict-surplus {
+  background: linear-gradient(135deg, #fffbeb 0%, #fef3c7 100%) !important;
+  border-color: #f59e0b !important;
+}
+
+/* Timeline dot styling */
+.timeline-dot::before {
+  content: '';
+  position: absolute;
+  left: -19px;
+  top: 5px;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background-color: #4f46e5;
+  border: 2px solid #ffffff;
+  box-shadow: 0 0 0 2px #c7d2fe;
+}
