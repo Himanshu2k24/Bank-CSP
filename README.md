@@ -61,5 +61,22 @@ $$\text{Difference} = \text{Actual Closing} - \text{Expected Closing}$$
 
 ---
 
-### 4. 🌐 Vercel Ready
-* Includes `vercel.json` for instant zero-configuration deployment on Vercel.
+### 4. 🔒 Personal Site Security: Master Password & 7-Day Session
+* **First-Time Setup:** On your first visit, create a Master Password / PIN.
+* **7-Day Session Expiration:** Check *"Remember for 7 days"* to stay logged in on that device for a full week.
+* **Multi-Device Lock:** When opened from any other system or mobile phone, the vault is locked until the Master Password is entered.
+* **One-Click Manual Lock:** Click the lock icon in the top header anytime to lock immediately.
+
+---
+
+### 5. 🔄 Multi-Device Synchronization & Data Safety
+* **Central Backend Server (`server.js`):**
+  * Automatically stores all daily records, customer deposits, payouts, and settings in the `data/` directory.
+  * Keeps Father's PC and Son's mobile 100% in sync on the same Wi-Fi network.
+* **Auto-Save & Morning Balance Persistence:**
+  * Morning Cash entered at morning is automatically saved; when opening at night, the morning data is preserved and pre-filled.
+* **Vercel Cloud Support (`api/index.js` & `vercel.json`):**
+  * Pre-configured serverless handler for Vercel deployment with optional Vercel KV / Upstash Redis support for global synchronization across systems.
+* **1-Click Backup & Restore:**
+  * Download all records, deposits, and payouts as a single `.json` backup file anytime.
+  * Upload the backup on any new computer or phone to restore 100% of your data.

@@ -1,7 +1,7 @@
 /**
  * CSP Daily Balance Manager - Backend Server
  * Pure Node.js (Zero external dependencies)
- * Enables multi-device live sync (Father's PC & Son's phone/laptop)
+ * Fully Synchronizes: Daily Hisab, Deposits, Payouts, Settings & Master Password
  */
 
 const http = require('http');
@@ -12,7 +12,9 @@ const url = require('url');
 
 const PORT = process.env.PORT || 3000;
 const DATA_DIR = path.join(__dirname, 'data');
-const DB_FILE = path.join(DATA_DIR, 'records.json');
+const RECORDS_FILE = path.join(DATA_DIR, 'records.json');
+const DEPOSITS_FILE = path.join(DATA_DIR, 'deposits.json');
+const PAYOUTS_FILE = path.join(DATA_DIR, 'payouts.json');
 const SETTINGS_FILE = path.join(DATA_DIR, 'settings.json');
 
 // Ensure data directory exists
@@ -20,15 +22,16 @@ if (!fs.existsSync(DATA_DIR)) {
   fs.mkdirSync(DATA_DIR, { recursive: true });
 }
 
-// Ensure records file exists
-if (!fs.existsSync(DB_FILE)) {
-  fs.writeFileSync(DB_FILE, JSON.stringify({}), 'utf8');
+// Ensure database files exist
+function ensureFile(filePath, defaultData) {
+  if (!fs.existsSync(filePath)) {
+    fs.writeFileSync(filePath, JSON.stringify(defaultData, null, 2), 'utf8');
+  }
 }
-
-// Ensure settings file exists
-if (!fs.existsSync(SETTINGS_FILE)) {
-  fs.writeFileSync(SETTINGS_FILE, JSON.stringify({ centerName: 'CSP Balance Manager' }), 'utf8');
-}
+ensureFile(RECORDS_FILE, {});
+ensureFile(DEPOSITS_FILE, []);
+ensureFile(PAYOUTS_FILE, []);
+ensureFile(SETTINGS_FILE, { centerName: 'CSP Balance Manager', password: '' });
 
 // MIME types
 const MIME_TYPES = {
@@ -42,13 +45,30 @@ const MIME_TYPES = {
   '.ico': 'image/x-icon'
 };
 
-// Helper to get local network IP addresses
+function readJson(file, fallback) {
+  try {
+    const raw = fs.readFileSync(file, 'utf8');
+    return JSON.parse(raw || 'null') ?? fallback;
+  } catch (e) {
+    return fallback;
+  }
+}
+
+function writeJson(file, data) {
+  try {
+    fs.writeFileSync(file, JSON.stringify(data, null, 2), 'utf8');
+    return true;
+  } catch (e) {
+    console.error('Write error for', file, e);
+    return false;
+  }
+}
+
 function getNetworkIPs() {
   const interfaces = os.networkInterfaces();
   const addresses = [];
   for (const name of Object.keys(interfaces)) {
     for (const net of interfaces[name]) {
-      // Skip internal (i.e. 127.0.0.1) and non-ipv4
       if (net.family === 'IPv4' && !net.internal) {
         addresses.push(net.address);
       }
@@ -57,35 +77,12 @@ function getNetworkIPs() {
   return addresses;
 }
 
-// Read database
-function readRecords() {
-  try {
-    const raw = fs.readFileSync(DB_FILE, 'utf8');
-    return JSON.parse(raw || '{}');
-  } catch (err) {
-    console.error('Error reading records.json:', err);
-    return {};
-  }
-}
-
-// Write database
-function writeRecords(data) {
-  try {
-    fs.writeFileSync(DB_FILE, JSON.stringify(data, null, 2), 'utf8');
-    return true;
-  } catch (err) {
-    console.error('Error writing records.json:', err);
-    return false;
-  }
-}
-
-// Request Body Parser
 function parseBody(req) {
   return new Promise((resolve, reject) => {
     let body = '';
     req.on('data', chunk => {
       body += chunk.toString();
-      if (body.length > 5 * 1024 * 1024) { // 5MB limit
+      if (body.length > 10 * 1024 * 1024) { // 10MB limit
         reject(new Error('Payload too large'));
       }
     });
@@ -100,12 +97,12 @@ function parseBody(req) {
   });
 }
 
-// Server handler
+// HTTP Server
 const server = http.createServer(async (req, res) => {
-  // CORS Headers for multi-device cross-origin safety
+  // CORS Headers
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
 
   if (req.method === 'OPTIONS') {
     res.writeHead(204);
@@ -118,7 +115,7 @@ const server = http.createServer(async (req, res) => {
 
   // --- API ROUTES ---
 
-  // 1. GET /api/status - Server info & IP addresses for multi-device connection
+  // 1. GET /api/status - Server info
   if (req.method === 'GET' && pathname === '/api/status') {
     const ips = getNetworkIPs();
     res.writeHead(200, { 'Content-Type': 'application/json' });
@@ -127,63 +124,41 @@ const server = http.createServer(async (req, res) => {
       port: PORT,
       localUrl: `http://localhost:${PORT}`,
       networkUrls: ips.map(ip => `http://${ip}:${PORT}`),
-      primaryNetworkUrl: ips.length > 0 ? `http://${ips[0]}:${PORT}` : `http://localhost:${PORT}`,
       serverTime: new Date().toISOString()
     }));
     return;
   }
 
-  // 2. GET /api/day?date=YYYY-MM-DD - Get record for specific date
-  if (req.method === 'GET' && pathname === '/api/day') {
-    const date = parsedUrl.query.date;
-    if (!date) {
-      res.writeHead(400, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ error: 'Date parameter required' }));
-      return;
-    }
+  // 2. GET /api/all-data - Complete data bundle for cross-device sync
+  if (req.method === 'GET' && pathname === '/api/all-data') {
+    const records = readJson(RECORDS_FILE, {});
+    const deposits = readJson(DEPOSITS_FILE, []);
+    const payouts = readJson(PAYOUTS_FILE, []);
+    const settings = readJson(SETTINGS_FILE, {});
 
-    const records = readRecords();
-    const record = records[date] || null;
     res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ success: true, date: date, record: record }));
+    res.end(JSON.stringify({
+      success: true,
+      records: records,
+      deposits: deposits,
+      payouts: payouts,
+      settings: settings,
+      serverTime: new Date().toISOString()
+    }));
     return;
   }
 
-  // 3. GET /api/records - Get all saved records
-  if (req.method === 'GET' && pathname === '/api/records') {
-    const records = readRecords();
-    // Return as array sorted by date descending
-    const list = Object.keys(records).map(k => records[k]).sort((a, b) => b.date.localeCompare(a.date));
-    res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ success: true, count: list.length, records: list }));
-    return;
-  }
-
-  // 4. POST /api/save - Save or update day record (preserves morning data when night data added)
-  if (req.method === 'POST' && pathname === '/api/save') {
+  // 3. POST /api/sync-all - Save all data (records, deposits, payouts, settings)
+  if (req.method === 'POST' && pathname === '/api/sync-all') {
     try {
       const body = await parseBody(req);
-      if (!body.date) {
-        res.writeHead(400, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ error: 'Date field is required' }));
-        return;
-      }
-
-      const records = readRecords();
-      const existing = records[body.date] || {};
-
-      // Merge data so morning inputs remain preserved if only night is sent or vice versa
-      const mergedRecord = {
-        ...existing,
-        ...body,
-        updatedAt: new Date().toISOString()
-      };
-
-      records[body.date] = mergedRecord;
-      writeRecords(records);
+      if (body.records) writeJson(RECORDS_FILE, body.records);
+      if (body.deposits) writeJson(DEPOSITS_FILE, body.deposits);
+      if (body.payouts) writeJson(PAYOUTS_FILE, body.payouts);
+      if (body.settings) writeJson(SETTINGS_FILE, body.settings);
 
       res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ success: true, record: mergedRecord }));
+      res.end(JSON.stringify({ success: true, message: 'All data synchronized successfully' }));
       return;
     } catch (err) {
       res.writeHead(500, { 'Content-Type': 'application/json' });
@@ -192,29 +167,122 @@ const server = http.createServer(async (req, res) => {
     }
   }
 
-  // 5. DELETE /api/day?date=YYYY-MM-DD - Delete record
-  if (req.method === 'DELETE' && pathname === '/api/day') {
+  // 4. GET /api/day?date=YYYY-MM-DD
+  if (req.method === 'GET' && pathname === '/api/day') {
     const date = parsedUrl.query.date;
-    if (!date) {
-      res.writeHead(400, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ error: 'Date parameter required' }));
+    const records = readJson(RECORDS_FILE, {});
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ success: true, date: date, record: records[date] || null }));
+    return;
+  }
+
+  // 5. POST /api/save - Save daily hisab record
+  if (req.method === 'POST' && pathname === '/api/save') {
+    try {
+      const body = await parseBody(req);
+      if (!body.date) {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'Date is required' }));
+        return;
+      }
+      const records = readJson(RECORDS_FILE, {});
+      const existing = records[body.date] || {};
+      const merged = { ...existing, ...body, updatedAt: new Date().toISOString() };
+      records[body.date] = merged;
+      writeJson(RECORDS_FILE, records);
+
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ success: true, record: merged }));
+      return;
+    } catch (err) {
+      res.writeHead(500, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: err.message }));
       return;
     }
+  }
 
-    const records = readRecords();
-    if (records[date]) {
-      delete records[date];
-      writeRecords(records);
+  // 6. GET /api/deposits & POST /api/deposits
+  if (pathname === '/api/deposits') {
+    if (req.method === 'GET') {
+      const deposits = readJson(DEPOSITS_FILE, []);
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ success: true, deposits: deposits }));
+      return;
     }
-    res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ success: true, message: 'Deleted' }));
-    return;
+    if (req.method === 'POST') {
+      try {
+        const body = await parseBody(req);
+        if (Array.isArray(body)) {
+          writeJson(DEPOSITS_FILE, body);
+        } else if (body.deposits && Array.isArray(body.deposits)) {
+          writeJson(DEPOSITS_FILE, body.deposits);
+        }
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: true, message: 'Deposits saved' }));
+        return;
+      } catch (err) {
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: err.message }));
+        return;
+      }
+    }
+  }
+
+  // 7. GET /api/payouts & POST /api/payouts
+  if (pathname === '/api/payouts') {
+    if (req.method === 'GET') {
+      const payouts = readJson(PAYOUTS_FILE, []);
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ success: true, payouts: payouts }));
+      return;
+    }
+    if (req.method === 'POST') {
+      try {
+        const body = await parseBody(req);
+        if (Array.isArray(body)) {
+          writeJson(PAYOUTS_FILE, body);
+        } else if (body.payouts && Array.isArray(body.payouts)) {
+          writeJson(PAYOUTS_FILE, body.payouts);
+        }
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: true, message: 'Payouts saved' }));
+        return;
+      } catch (err) {
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: err.message }));
+        return;
+      }
+    }
+  }
+
+  // 8. GET /api/settings & POST /api/settings (for password & shop name)
+  if (pathname === '/api/settings') {
+    if (req.method === 'GET') {
+      const settings = readJson(SETTINGS_FILE, {});
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ success: true, settings: settings }));
+      return;
+    }
+    if (req.method === 'POST') {
+      try {
+        const body = await parseBody(req);
+        const existing = readJson(SETTINGS_FILE, {});
+        const updated = { ...existing, ...body };
+        writeJson(SETTINGS_FILE, updated);
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: true, settings: updated }));
+        return;
+      } catch (err) {
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: err.message }));
+        return;
+      }
+    }
   }
 
   // --- STATIC FILE SERVING ---
   let filePath = path.join(__dirname, pathname === '/' ? 'index.html' : pathname);
   
-  // Prevent directory traversal
   if (!filePath.startsWith(__dirname)) {
     res.writeHead(403, { 'Content-Type': 'text/plain' });
     res.end('Forbidden');
@@ -223,7 +291,6 @@ const server = http.createServer(async (req, res) => {
 
   fs.stat(filePath, (err, stats) => {
     if (err || !stats.isFile()) {
-      // Fallback to index.html if not found (SPA behavior)
       filePath = path.join(__dirname, 'index.html');
     }
 
@@ -247,10 +314,9 @@ server.listen(PORT, '0.0.0.0', () => {
   console.log('================================================================');
   console.log('   CSP Daily Balance Manager Server is RUNNING!                ');
   console.log('================================================================');
-  console.log(` > On this PC (Father's System): http://localhost:${PORT}`);
+  console.log(` > On this PC: http://localhost:${PORT}`);
   if (ips.length > 0) {
-    console.log(` > On your Phone / Other PC (Same Wi-Fi): http://${ips[0]}:${PORT}`);
+    console.log(` > On other systems (Phone / Laptop): http://${ips[0]}:${PORT}`);
   }
   console.log('================================================================');
 });
-

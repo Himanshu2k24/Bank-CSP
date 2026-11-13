@@ -1,8 +1,11 @@
 /**
  * CSP Daily Balance & Cash Manager
  * Multi-device Synchronized Financial Manager
- * Supports: Daily Reconciliation, Customer Deposits & Kitna Baki / Diye Ledgers
- * Features Date-wise Filters & Step History Tracking for Modifications
+ * Features:
+ *  - Master Password Protection with 7-Day Session Expiration
+ *  - Cross-Device Safe Data Sync & Backup/Restore
+ *  - Daily Reconciliation, Customer Deposits & Kitna Baki / Diye Ledgers
+ *  - Date-wise Filters & Step History Tracking for Modifications
  */
 
 (function () {
@@ -12,6 +15,7 @@
   let activeTab = 'daily'; // 'daily', 'deposit', or 'payouts'
   let activeDenomTarget = 'morning';
   let centerName = localStorage.getItem('csp_center_name') || 'CSP Balance Manager';
+  let masterPassword = localStorage.getItem('csp_master_password') || '';
   let isServerConnected = false;
 
   // Active items for modals
@@ -22,7 +26,23 @@
 
   // DOM Elements
   const el = {
-    // Navigation & Tabs
+    // Lock Screen Elements
+    lockScreenOverlay: document.getElementById('lockScreenOverlay'),
+    lockCard: document.getElementById('lockCard'),
+    lockScreenTitle: document.getElementById('lockScreenTitle'),
+    lockScreenSubtitle: document.getElementById('lockScreenSubtitle'),
+    lockScreenForm: document.getElementById('lockScreenForm'),
+    lockInputLabel: document.getElementById('lockInputLabel'),
+    lockPasswordInput: document.getElementById('lockPasswordInput'),
+    togglePasswordVisibilityBtn: document.getElementById('togglePasswordVisibilityBtn'),
+    togglePasswordIcon: document.getElementById('togglePasswordIcon'),
+    rememberMeContainer: document.getElementById('rememberMeContainer'),
+    rememberMeCheckbox: document.getElementById('rememberMeCheckbox'),
+    unlockBtnText: document.getElementById('unlockBtnText'),
+    lockErrorMsg: document.getElementById('lockErrorMsg'),
+    lockSiteBtn: document.getElementById('lockSiteBtn'),
+
+    // Top Navigation & Tabs
     headerTitle: document.getElementById('headerTitle'),
     editCenterBtn: document.getElementById('editCenterBtn'),
     tabDailyHisab: document.getElementById('tabDailyHisab'),
@@ -38,6 +58,7 @@
     selectedDate: document.getElementById('selectedDate'),
 
     // Top Controls
+    openBackupBtn: document.getElementById('openBackupBtn'),
     openHistoryBtn: document.getElementById('openHistoryBtn'),
     printReportBtn: document.getElementById('printReportBtn'),
 
@@ -146,6 +167,18 @@
     modifyReasonInput: document.getElementById('modifyReasonInput'),
     modifyStepsTimelineContainer: document.getElementById('modifyStepsTimelineContainer'),
 
+    // ===================================
+    // BACKUP & SYNC MODAL
+    // ===================================
+    backupModal: document.getElementById('backupModal'),
+    closeBackupModal: document.getElementById('closeBackupModal'),
+    syncServerDot: document.getElementById('syncServerDot'),
+    syncServerStatusText: document.getElementById('syncServerStatusText'),
+    syncServerSubtext: document.getElementById('syncServerSubtext'),
+    forceSyncBtn: document.getElementById('forceSyncBtn'),
+    downloadBackupBtn: document.getElementById('downloadBackupBtn'),
+    restoreFileInput: document.getElementById('restoreFileInput'),
+
     // Denomination Modal
     denomModal: document.getElementById('denomModal'),
     denomModalTitle: document.getElementById('denomModalTitle'),
@@ -170,6 +203,7 @@
     cancelCenterBtn: document.getElementById('cancelCenterBtn'),
     saveCenterBtn: document.getElementById('saveCenterBtn'),
     settingCenterName: document.getElementById('settingCenterName'),
+    settingPassword: document.getElementById('settingPassword'),
 
     // Print Slips
     printableSlip: document.getElementById('printableSlip'),
@@ -229,12 +263,292 @@
     }, 2200);
   }
 
-  // Prevent accidental increment/decrement on mouse scroll
+  // Prevent accidental increment/decrement on scroll
   document.addEventListener('wheel', function (e) {
     if (document.activeElement && document.activeElement.type === 'number') {
       document.activeElement.blur();
     }
   }, { passive: true });
+
+  // =========================================================================
+  // 🔒 MASTER PASSWORD & 7-DAY EXPIRATION SYSTEM
+  // =========================================================================
+  const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
+
+  function checkPasswordAuth() {
+    // 1. If no password set anywhere yet
+    if (!masterPassword) {
+      el.lockScreenTitle.innerText = "Setup Master Password / PIN";
+      el.lockScreenSubtitle.innerText = "Set a secure password for your personal site";
+      el.lockInputLabel.innerText = "Create New Password / PIN";
+      el.unlockBtnText.innerText = "Save & Unlock";
+      el.rememberMeContainer.classList.add('hidden');
+      el.lockScreenOverlay.classList.remove('hidden');
+      return false;
+    }
+
+    // 2. Check 7-day session expiration
+    const expiry = localStorage.getItem('csp_session_expiry');
+    const now = Date.now();
+
+    if (expiry && now < Number(expiry)) {
+      // Session is valid within 7 days -> Auto-unlock!
+      el.lockScreenOverlay.classList.add('hidden');
+      return true;
+    }
+
+    // 3. Expired or not logged in -> Prompt for password
+    el.lockScreenTitle.innerText = "Personal CSP Vault";
+    el.lockScreenSubtitle.innerText = "Enter your Master Password / PIN to unlock";
+    el.lockInputLabel.innerText = "Password / PIN";
+    el.unlockBtnText.innerText = "Unlock Site";
+    el.rememberMeContainer.classList.remove('hidden');
+    el.lockErrorMsg.classList.add('hidden');
+    el.lockPasswordInput.value = '';
+    el.lockScreenOverlay.classList.remove('hidden');
+    return false;
+  }
+
+  function handleUnlockSubmit(e) {
+    e.preventDefault();
+    const entered = el.lockPasswordInput.value.trim();
+
+    // Setup mode: user sets new password
+    if (!masterPassword) {
+      if (!entered || entered.length < 3) {
+        alert('Password should be at least 3 characters or numbers long!');
+        return;
+      }
+      masterPassword = entered;
+      localStorage.setItem('csp_master_password', masterPassword);
+      // Set 7 days session
+      const expiry = Date.now() + SEVEN_DAYS_MS;
+      localStorage.setItem('csp_session_expiry', expiry.toString());
+      el.lockScreenOverlay.classList.add('hidden');
+      showToast('Master password saved! Unlocked for 7 days.');
+      syncAllDataToServer();
+      return;
+    }
+
+    // Verify existing password
+    if (entered === masterPassword) {
+      el.lockErrorMsg.classList.add('hidden');
+      const remember = el.rememberMeCheckbox.checked;
+      const expiry = Date.now() + (remember ? SEVEN_DAYS_MS : 2 * 60 * 60 * 1000);
+      localStorage.setItem('csp_session_expiry', expiry.toString());
+      el.lockScreenOverlay.classList.add('hidden');
+      showToast('Unlocked! Access valid for 7 days.');
+    } else {
+      el.lockErrorMsg.classList.remove('hidden');
+      el.lockCard.classList.remove('animate-shake');
+      void el.lockCard.offsetWidth; // Trigger reflow for animation
+      el.lockCard.classList.add('animate-shake');
+      el.lockPasswordInput.select();
+    }
+  }
+
+  function lockSiteManually() {
+    localStorage.removeItem('csp_session_expiry');
+    checkPasswordAuth();
+    showToast('Site locked successfully');
+  }
+
+  // =========================================================================
+  // CROSS-DEVICE DATA SYNCHRONIZATION & SAFETY
+  // =========================================================================
+  async function checkServerStatusAndSync() {
+    try {
+      const res = await fetch('/api/all-data', { cache: 'no-store' });
+      if (res.ok) {
+        isServerConnected = true;
+        const data = await res.json();
+        
+        // 1. Merge Settings & Password
+        if (data.settings) {
+          if (data.settings.centerName) {
+            centerName = data.settings.centerName;
+            localStorage.setItem('csp_center_name', centerName);
+            el.headerTitle.innerText = centerName;
+          }
+          if (data.settings.password) {
+            if (masterPassword && masterPassword !== data.settings.password) {
+              localStorage.removeItem('csp_session_expiry');
+            }
+            masterPassword = data.settings.password;
+            localStorage.setItem('csp_master_password', masterPassword);
+          }
+        }
+
+        // 2. Merge Deposits
+        if (Array.isArray(data.deposits) && data.deposits.length > 0) {
+          const localDeposits = getDeposits();
+          const merged = mergeArraysById(localDeposits, data.deposits);
+          localStorage.setItem('csp_deposits', JSON.stringify(merged));
+        }
+
+        // 3. Merge Payouts
+        if (Array.isArray(data.payouts) && data.payouts.length > 0) {
+          const localPayouts = getPayouts();
+          const merged = mergeArraysById(localPayouts, data.payouts);
+          localStorage.setItem('csp_payouts', JSON.stringify(merged));
+        }
+
+        // 4. Merge Daily Hisab Records
+        if (data.records && Object.keys(data.records).length > 0) {
+          let localHistory = JSON.parse(localStorage.getItem('csp_history') || '[]');
+          const serverList = Object.keys(data.records).map(k => data.records[k]);
+          const merged = mergeArraysByDate(localHistory, serverList);
+          localStorage.setItem('csp_history', JSON.stringify(merged));
+        }
+
+        updateSyncUiStatus(true);
+        return;
+      }
+    } catch (e) {
+      isServerConnected = false;
+    }
+    updateSyncUiStatus(false);
+  }
+
+  function mergeArraysById(localArr, remoteArr) {
+    const map = new Map();
+    remoteArr.forEach(item => map.set(item.id, item));
+    localArr.forEach(item => {
+      if (!map.has(item.id)) {
+        map.set(item.id, item);
+      } else {
+        // Keep whichever has longer step history or newer timestamp
+        const remoteItem = map.get(item.id);
+        const localHistLen = item.history ? item.history.length : 1;
+        const remoteHistLen = remoteItem.history ? remoteItem.history.length : 1;
+        if (localHistLen >= remoteHistLen) {
+          map.set(item.id, item);
+        }
+      }
+    });
+    return Array.from(map.values()).sort((a, b) => (b.timestamp || '').localeCompare(a.timestamp || ''));
+  }
+
+  function mergeArraysByDate(localArr, remoteArr) {
+    const map = new Map();
+    remoteArr.forEach(item => map.set(item.date, item));
+    localArr.forEach(item => {
+      if (!map.has(item.date)) map.set(item.date, item);
+    });
+    return Array.from(map.values()).sort((a, b) => b.date.localeCompare(a.date));
+  }
+
+  async function syncAllDataToServer() {
+    if (!isServerConnected) return;
+    try {
+      const records = JSON.parse(localStorage.getItem('csp_history') || '[]');
+      const recordsMap = {};
+      records.forEach(r => { if (r.date) recordsMap[r.date] = r; });
+
+      const bundle = {
+        records: recordsMap,
+        deposits: getDeposits(),
+        payouts: getPayouts(),
+        settings: {
+          centerName: centerName,
+          password: masterPassword
+        }
+      };
+
+      await fetch('/api/sync-all', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(bundle)
+      });
+    } catch (e) {
+      console.warn('Sync to server failed:', e);
+    }
+  }
+
+  function updateSyncUiStatus(online) {
+    if (online) {
+      el.syncServerDot.className = 'w-2 h-2 rounded-full bg-emerald-500 animate-pulse';
+      el.syncServerStatusText.innerText = 'Central Server Online (Synced)';
+      el.syncServerSubtext.innerText = 'Data is safely stored on disk and synced across all your connected systems.';
+    } else {
+      el.syncServerDot.className = 'w-2 h-2 rounded-full bg-amber-500';
+      el.syncServerStatusText.innerText = 'Local Storage Safe Vault (Offline)';
+      el.syncServerSubtext.innerText = 'Running standalone. You can download or upload complete backups anytime below.';
+    }
+  }
+
+  // --- 1-CLICK BACKUP & RESTORE ---
+  function downloadCompleteBackup() {
+    const backupData = {
+      version: '2.0',
+      exportedAt: new Date().toISOString(),
+      centerName: centerName,
+      masterPassword: masterPassword,
+      history: JSON.parse(localStorage.getItem('csp_history') || '[]'),
+      deposits: getDeposits(),
+      payouts: getPayouts()
+    };
+
+    const dateStr = new Date().toISOString().split('T')[0];
+    const blob = new Blob([JSON.stringify(backupData, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `CSP_Personal_Backup_${dateStr}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    showToast('Complete backup file downloaded safely!');
+  }
+
+  function restoreFromBackupFile(e) {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = function (event) {
+      try {
+        const data = JSON.parse(event.target.result);
+        if (!data.deposits && !data.payouts && !data.history) {
+          alert('Invalid backup file format!');
+          return;
+        }
+
+        if (confirm('Restore all data from this backup? This will update your records safely.')) {
+          if (data.centerName) {
+            centerName = data.centerName;
+            localStorage.setItem('csp_center_name', centerName);
+            el.headerTitle.innerText = centerName;
+          }
+          if (data.masterPassword) {
+            masterPassword = data.masterPassword;
+            localStorage.setItem('csp_master_password', masterPassword);
+          }
+          if (Array.isArray(data.deposits)) {
+            localStorage.setItem('csp_deposits', JSON.stringify(data.deposits));
+          }
+          if (Array.isArray(data.payouts)) {
+            localStorage.setItem('csp_payouts', JSON.stringify(data.payouts));
+          }
+          if (Array.isArray(data.history)) {
+            localStorage.setItem('csp_history', JSON.stringify(data.history));
+          }
+
+          syncAllDataToServer();
+          renderDepositsList();
+          renderPayoutsList();
+          loadDayData(el.selectedDate.value);
+          el.backupModal.classList.add('hidden');
+          showToast('All data restored 100% successfully!');
+        }
+      } catch (err) {
+        alert('Error parsing backup file: ' + err.message);
+      }
+    };
+    reader.readAsText(file);
+    e.target.value = ''; // Reset file input
+  }
 
   // --- INIT ---
   async function init() {
@@ -247,7 +561,13 @@
     el.headerTitle.innerText = centerName;
     el.settingCenterName.value = centerName;
 
-    await checkServerStatus();
+    // Check & sync server data first
+    await checkServerStatusAndSync();
+
+    // Check password protection
+    checkPasswordAuth();
+
+    // Load day data
     await loadDayData(today);
 
     renderDepositsList();
@@ -259,20 +579,10 @@
     if (window.lucide) window.lucide.createIcons();
   }
 
-  async function checkServerStatus() {
-    try {
-      const res = await fetch('/api/status', { cache: 'no-store' });
-      if (res.ok) isServerConnected = true;
-    } catch (e) {
-      isServerConnected = false;
-    }
-  }
-
   // --- TAB NAVIGATION (Daily Hisab vs Deposit vs Kitna Diye) ---
   function switchTab(tab) {
     activeTab = tab;
 
-    // Reset tab button styles
     const inactiveClass = 'px-2.5 sm:px-3 py-1 rounded-lg text-xs font-bold transition flex items-center gap-1.5 text-slate-600 hover:text-slate-900';
     const activeDailyClass = 'px-2.5 sm:px-3 py-1 rounded-lg text-xs font-bold transition flex items-center gap-1.5 bg-white text-blue-700 shadow-xs';
     const activeDepositClass = 'px-2.5 sm:px-3 py-1 rounded-lg text-xs font-bold transition flex items-center gap-1.5 bg-white text-emerald-700 shadow-xs';
@@ -306,17 +616,17 @@
   let lastVerdict = null;
 
   function calculate() {
-    const accMorning = getNum(el.accountMorning);
-    const cashMorning = getNum(el.morningCash);
-    const paymentDue = getNum(el.paymentDue);   // ADD (+)
-    const udhari = getNum(el.udhari);           // SUBTRACT (-)
-    const homeUse = getNum(el.homeUse);         // SUBTRACT (-)
-    const accNight = getNum(el.accountNight);
-    const cashNight = getNum(el.cashNight);
+    const accM = getNum(el.accountMorning);
+    const cashM = getNum(el.morningCash);
+    const pDue = getNum(el.paymentDue);   // ADD (+)
+    const udh = getNum(el.udhari);        // SUBTRACT (-)
+    const home = getNum(el.homeUse);      // SUBTRACT (-)
+    const accN = getNum(el.accountNight);
+    const cashN = getNum(el.cashNight);
 
-    const morningTotal = accMorning + cashMorning;
-    const expectedClosing = morningTotal + paymentDue - udhari - homeUse;
-    const actualClosing = accNight + cashNight;
+    const morningTotal = accM + cashM;
+    const expectedClosing = morningTotal + pDue - udh - home;
+    const actualClosing = accN + cashN;
     const diff = Math.round((actualClosing - expectedClosing) * 100) / 100;
 
     // Badges & Steps
@@ -324,9 +634,9 @@
     el.subtotalNightBadge.innerText = 'Total: ' + formatINR(actualClosing);
 
     el.stepMorningTotal.innerText = formatINR(morningTotal);
-    el.stepDue.innerText = '+' + formatINR(paymentDue);
-    el.stepUdhari.innerText = '-' + formatINR(udhari);
-    el.stepHome.innerText = '-' + formatINR(homeUse);
+    el.stepDue.innerText = '+' + formatINR(pDue);
+    el.stepUdhari.innerText = '-' + formatINR(udh);
+    el.stepHome.innerText = '-' + formatINR(home);
     el.stepExpected.innerText = formatINR(expectedClosing);
     el.stepActual.innerText = formatINR(actualClosing);
 
@@ -460,6 +770,11 @@
       if (raw) {
         try { loadedData = JSON.parse(raw); } catch (e) {}
       }
+      if (!loadedData) {
+        const history = JSON.parse(localStorage.getItem('csp_history') || '[]');
+        const found = history.find(h => h.date === date);
+        if (found) loadedData = found;
+      }
     }
 
     if (loadedData) {
@@ -487,6 +802,7 @@
     el.cashNight.value = '';
   }
 
+  let draftSyncTimer = null;
   function autoSaveLocal() {
     const date = el.selectedDate.value;
     const data = {
@@ -500,6 +816,18 @@
       cashNight: el.cashNight.value
     };
     localStorage.setItem(getDraftKey(date), JSON.stringify(data));
+
+    // Debounced auto-sync to backend so Father's morning inputs are instantly available on other devices!
+    clearTimeout(draftSyncTimer);
+    draftSyncTimer = setTimeout(() => {
+      if (isServerConnected) {
+        fetch('/api/save', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(data)
+        }).catch(() => {});
+      }
+    }, 800);
   }
 
   async function saveRecord() {
@@ -541,21 +869,12 @@
     history.unshift(recordData);
     localStorage.setItem('csp_history', JSON.stringify(history));
 
-    if (isServerConnected) {
-      try {
-        await fetch('/api/save', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(recordData)
-        });
-      } catch (e) {}
-    }
-
-    showToast('Record saved successfully!');
+    syncAllDataToServer();
+    showToast('Record saved and synchronized!');
   }
 
   // =========================================================================
-  // SECTION: DEPOSIT SECTION (Name, Account No, Amount, Date of Payment)
+  // SECTION: DEPOSITS
   // =========================================================================
   function getDeposits() {
     return JSON.parse(localStorage.getItem('csp_deposits') || '[]');
@@ -564,6 +883,7 @@
   function saveDeposits(list) {
     localStorage.setItem('csp_deposits', JSON.stringify(list));
     renderDepositsList();
+    syncAllDataToServer();
   }
 
   function handleDepositSubmit(e) {
@@ -589,7 +909,6 @@
       paymentDate: paymentDate,
       timestamp: now.toISOString(),
       formattedTime: formattedTime,
-      // Step history tracking
       history: [
         {
           step: 1,
@@ -604,12 +923,10 @@
     list.unshift(newDeposit);
     saveDeposits(list);
 
-    // Reset Form
     el.depositCustomerName.value = '';
     el.depositAccountNumber.value = '';
     el.depositAmount.value = '';
 
-    // Show Confirmation
     showDepositConfirmation(newDeposit);
   }
 
@@ -644,7 +961,6 @@
     const filterDate = el.depositFilterDate.value;
     const query = (el.depositSearchInput.value || '').toLowerCase().trim();
 
-    // Filter by Date (if specified) and Search query
     const filtered = list.filter(d => {
       const matchDate = filterDate ? d.paymentDate === filterDate : true;
       const matchQuery = !query ? true : (
@@ -654,12 +970,10 @@
       return matchDate && matchQuery;
     });
 
-    // Summary calculations
     const totalDeposited = filtered.reduce((acc, curr) => acc + (curr.amount || 0), 0);
     el.depositSummaryTotal.innerText = formatINR(totalDeposited);
     el.depositSummaryCount.innerText = filtered.length;
 
-    // Badge in navbar (today's deposits)
     const today = el.selectedDate.value;
     const todayDeposits = list.filter(d => d.paymentDate === today);
     el.tabDepositBadge.innerText = todayDeposits.length;
@@ -684,7 +998,7 @@
 
       const hasHistory = d.history && d.history.length > 1;
       const stepBadge = hasHistory ? `
-        <span class="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-200 inline-flex items-center gap-1 cursor-pointer view-history-trigger" data-id="${d.id}" data-type="deposit">
+        <span class="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-200 inline-flex items-center gap-1 cursor-pointer view-history-trigger" data-id="${d.id}">
           <i data-lucide="history" class="w-3 h-3"></i>
           <span>Step ${d.history.length} (Modified)</span>
         </span>
@@ -708,15 +1022,12 @@
           </div>
           
           <div class="flex items-center gap-1">
-            <!-- Modify Amount Button -->
             <button class="deposit-modify-btn p-1.5 rounded-lg text-indigo-600 hover:bg-indigo-50 transition" title="Modify Amount & Store Step" data-id="${d.id}">
               <i data-lucide="edit-3" class="w-4 h-4"></i>
             </button>
-            <!-- Print Slip -->
             <button class="deposit-print-btn p-1.5 rounded-lg text-slate-600 hover:bg-slate-100 transition" title="Print Deposit Slip" data-id="${d.id}">
               <i data-lucide="printer" class="w-4 h-4"></i>
             </button>
-            <!-- Delete Button -->
             <button class="deposit-del-btn p-1.5 rounded-lg text-rose-500 hover:bg-rose-50 transition" title="Delete" data-id="${d.id}">
               <i data-lucide="trash-2" class="w-4 h-4"></i>
             </button>
@@ -727,17 +1038,8 @@
       el.depositsListContainer.appendChild(card);
     });
 
-    // Attach row listeners
-    el.depositsListContainer.querySelectorAll('.deposit-modify-btn').forEach(btn => {
+    el.depositsListContainer.querySelectorAll('.deposit-modify-btn, .view-history-trigger').forEach(btn => {
       btn.addEventListener('click', (e) => {
-        const id = e.currentTarget.getAttribute('data-id');
-        const d = getDeposits().find(item => item.id === id);
-        if (d) openModifyModal('deposit', d);
-      });
-    });
-
-    el.depositsListContainer.querySelectorAll('.view-history-trigger').forEach(badge => {
-      badge.addEventListener('click', (e) => {
         const id = e.currentTarget.getAttribute('data-id');
         const d = getDeposits().find(item => item.id === id);
         if (d) openModifyModal('deposit', d);
@@ -794,7 +1096,7 @@
   }
 
   // =========================================================================
-  // SECTION: KITNA DIYE / BAKI SECTION (Name, Amount, Mobile)
+  // SECTION: KITNA DIYE / BAKI
   // =========================================================================
   function getPayouts() {
     return JSON.parse(localStorage.getItem('csp_payouts') || '[]');
@@ -803,6 +1105,7 @@
   function savePayouts(list) {
     localStorage.setItem('csp_payouts', JSON.stringify(list));
     renderPayoutsList();
+    syncAllDataToServer();
   }
 
   function handlePayoutSubmit(e) {
@@ -830,7 +1133,6 @@
       name: name,
       amount: amount,
       mobile: mobile,
-      // Step history tracking
       history: [
         {
           step: 1,
@@ -845,12 +1147,10 @@
     list.unshift(newPayout);
     savePayouts(list);
 
-    // Reset Form
     el.payoutName.value = '';
     el.payoutAmount.value = '';
     el.payoutMobile.value = '';
 
-    // Show Confirmation Dialog
     showPayoutConfirmation(newPayout);
   }
 
@@ -915,7 +1215,6 @@ Thank you for visiting!`;
     const filterDate = el.payoutFilterDate.value;
     const query = (el.searchPayoutInput.value || '').toLowerCase().trim();
 
-    // Filter by Date (if specified) and Search query
     const filtered = list.filter(p => {
       const matchDate = filterDate ? p.date === filterDate : true;
       const matchQuery = !query ? true : (
@@ -925,12 +1224,10 @@ Thank you for visiting!`;
       return matchDate && matchQuery;
     });
 
-    // Summary calculations
-    const todayTotal = filtered.reduce((acc, curr) => acc + (curr.amount || 0), 0);
-    el.payoutSummaryTotal.innerText = formatINR(todayTotal);
+    const totalGiven = filtered.reduce((acc, curr) => acc + (curr.amount || 0), 0);
+    el.payoutSummaryTotal.innerText = formatINR(totalGiven);
     el.payoutSummaryCount.innerText = filtered.length;
 
-    // Badge in navbar (today's count)
     const today = el.selectedDate.value;
     const todayPayouts = list.filter(p => p.date === today);
     el.tabKitnaDiyeBadge.innerText = todayPayouts.length;
@@ -979,19 +1276,15 @@ Thank you for visiting!`;
           </div>
           
           <div class="flex items-center gap-1">
-            <!-- Modify Amount Button -->
             <button class="payout-modify-btn p-1.5 rounded-lg text-indigo-600 hover:bg-indigo-50 transition" title="Modify Amount & Store Step" data-id="${p.id}">
               <i data-lucide="edit-3" class="w-4 h-4"></i>
             </button>
-            <!-- WhatsApp -->
             <button class="payout-wa-btn p-1.5 rounded-lg text-emerald-600 hover:bg-emerald-50 transition" title="Send WhatsApp Receipt" data-id="${p.id}">
               <i data-lucide="message-circle" class="w-4 h-4"></i>
             </button>
-            <!-- Print Slip -->
             <button class="payout-print-btn p-1.5 rounded-lg text-slate-600 hover:bg-slate-100 transition" title="Print Slip" data-id="${p.id}">
               <i data-lucide="printer" class="w-4 h-4"></i>
             </button>
-            <!-- Delete -->
             <button class="payout-del-btn p-1.5 rounded-lg text-rose-500 hover:bg-rose-50 transition" title="Delete" data-id="${p.id}">
               <i data-lucide="trash-2" class="w-4 h-4"></i>
             </button>
@@ -1002,17 +1295,8 @@ Thank you for visiting!`;
       el.payoutsListContainer.appendChild(card);
     });
 
-    // Attach row listeners
-    el.payoutsListContainer.querySelectorAll('.payout-modify-btn').forEach(btn => {
+    el.payoutsListContainer.querySelectorAll('.payout-modify-btn, .view-payout-history-trigger').forEach(btn => {
       btn.addEventListener('click', (e) => {
-        const id = e.currentTarget.getAttribute('data-id');
-        const p = getPayouts().find(item => item.id === id);
-        if (p) openModifyModal('payout', p);
-      });
-    });
-
-    el.payoutsListContainer.querySelectorAll('.view-payout-history-trigger').forEach(badge => {
-      badge.addEventListener('click', (e) => {
         const id = e.currentTarget.getAttribute('data-id');
         const p = getPayouts().find(item => item.id === id);
         if (p) openModifyModal('payout', p);
@@ -1078,7 +1362,6 @@ Thank you for visiting!`;
 
   // =========================================================================
   // UNIVERSAL "MODIFY AMOUNT" & STEP HISTORY MODAL
-  // Works for both Deposit & Kitna Baki / Diye!
   // =========================================================================
   function openModifyModal(type, item) {
     activeModifyType = type;
@@ -1146,7 +1429,6 @@ Thank you for visiting!`;
     const now = new Date();
     const formattedTimestamp = now.toLocaleDateString('en-IN', { day: '2-digit', month: 'short' }) + ' ' + now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
-    // Ensure history array exists
     if (!activeModifyItem.history) {
       activeModifyItem.history = [
         {
@@ -1168,7 +1450,6 @@ Thank you for visiting!`;
 
     activeModifyItem.amount = newAmount;
 
-    // Save based on active type
     if (activeModifyType === 'deposit') {
       const list = getDeposits();
       const idx = list.findIndex(d => d.id === activeModifyItem.id);
@@ -1230,7 +1511,7 @@ Thank you for visiting!`;
     showToast(`Applied ₹${total.toLocaleString('en-IN')}`);
   }
 
-  // --- PRINT SLIP (DAILY RECONCILIATION) ---
+  // --- PRINT SLIP ---
   function printSlip() {
     el.slipCenterName.innerText = centerName;
     el.slipDate.innerText = `DATE: ${el.selectedDate.value} | TIME: ${new Date().toLocaleTimeString()}`;
@@ -1276,13 +1557,13 @@ Thank you for visiting!`;
     window.print();
   }
 
-  // --- DEMO SAMPLE DATA ---
+  // --- DEMO SAMPLE ---
   function fillSample() {
     el.accountMorning.value = 30000;
     el.morningCash.value = 25000;
-    el.paymentDue.value = 4000; // ADD (+4,000)
-    el.udhari.value = 2000;     // SUBTRACT (-2,000)
-    el.homeUse.value = 1000;    // SUBTRACT (-1,000)
+    el.paymentDue.value = 4000;
+    el.udhari.value = 2000;
+    el.homeUse.value = 1000;
     el.accountNight.value = 40000;
     el.cashNight.value = 16000;
 
@@ -1293,12 +1574,36 @@ Thank you for visiting!`;
 
   // --- EVENT LISTENERS ---
   function attachListeners() {
+    // Lock Screen Submit & Toggles
+    el.lockScreenForm.addEventListener('submit', handleUnlockSubmit);
+    el.lockSiteBtn.addEventListener('click', lockSiteManually);
+    el.togglePasswordVisibilityBtn.addEventListener('click', () => {
+      const isPwd = el.lockPasswordInput.type === 'password';
+      el.lockPasswordInput.type = isPwd ? 'text' : 'password';
+      el.togglePasswordIcon.setAttribute('data-lucide', isPwd ? 'eye-off' : 'eye');
+      if (window.lucide) window.lucide.createIcons();
+    });
+
+    // Backup & Restore Actions
+    el.openBackupBtn.addEventListener('click', () => {
+      checkServerStatusAndSync();
+      el.backupModal.classList.remove('hidden');
+    });
+    el.closeBackupModal.addEventListener('click', () => el.backupModal.classList.add('hidden'));
+    el.forceSyncBtn.addEventListener('click', async () => {
+      await checkServerStatusAndSync();
+      await syncAllDataToServer();
+      showToast('Sync completed with server!');
+    });
+    el.downloadBackupBtn.addEventListener('click', downloadCompleteBackup);
+    el.restoreFileInput.addEventListener('change', restoreFromBackupFile);
+
     // Tab Navigation
     el.tabDailyHisab.addEventListener('click', () => switchTab('daily'));
     el.tabDeposit.addEventListener('click', () => switchTab('deposit'));
     el.tabKitnaDiye.addEventListener('click', () => switchTab('payouts'));
 
-    // Deposit Form Submit
+    // Deposit Form Submit & Filters
     el.depositForm.addEventListener('submit', handleDepositSubmit);
     el.depositSearchInput.addEventListener('input', renderDepositsList);
     el.depositFilterDate.addEventListener('change', renderDepositsList);
@@ -1350,7 +1655,7 @@ Thank you for visiting!`;
     el.closeModifyModal.addEventListener('click', () => el.modifyModal.classList.add('hidden'));
     el.cancelModifyBtn.addEventListener('click', () => el.modifyModal.classList.add('hidden'));
 
-    // Daily Balance Inputs
+    // Daily Balance inputs
     [
       el.accountMorning, el.morningCash, el.paymentDue,
       el.udhari, el.homeUse, el.accountNight, el.cashNight
@@ -1410,23 +1715,38 @@ Thank you for visiting!`;
       if (confirm('Clear history?')) {
         localStorage.removeItem('csp_history');
         renderHistoryModal();
+        syncAllDataToServer();
         showToast('History cleared');
       }
     });
 
-    // Center Details Modal
+    // Center Details & Password Modal
     el.editCenterBtn.addEventListener('click', () => el.centerModal.classList.remove('hidden'));
     el.cancelCenterBtn.addEventListener('click', () => el.centerModal.classList.add('hidden'));
     el.saveCenterBtn.addEventListener('click', () => {
       centerName = el.settingCenterName.value.trim() || 'CSP Balance Manager';
       localStorage.setItem('csp_center_name', centerName);
       el.headerTitle.innerText = centerName;
+
+      // Update Master Password if entered
+      const newPwd = el.settingPassword.value.trim();
+      if (newPwd) {
+        masterPassword = newPwd;
+        localStorage.setItem('csp_master_password', masterPassword);
+        // Extend 7 days
+        localStorage.setItem('csp_session_expiry', (Date.now() + SEVEN_DAYS_MS).toString());
+        el.settingPassword.value = '';
+        showToast('Password updated successfully!');
+      } else {
+        showToast('Shop details updated');
+      }
+
+      syncAllDataToServer();
       el.centerModal.classList.add('hidden');
-      showToast('Shop name updated');
     });
 
-    // Close on backdrop
-    [el.denomModal, el.historyModal, el.centerModal, el.confirmEntryModal, el.confirmDepositModal, el.modifyModal].forEach(modal => {
+    // Close on backdrop click
+    [el.denomModal, el.historyModal, el.centerModal, el.confirmEntryModal, el.confirmDepositModal, el.modifyModal, el.backupModal].forEach(modal => {
       modal.addEventListener('click', (e) => {
         if (e.target === modal) modal.classList.add('hidden');
       });

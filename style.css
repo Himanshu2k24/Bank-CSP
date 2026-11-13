@@ -47,7 +47,7 @@ input[type=number] {
     display: block !important;
   }
 
-  header, main, footer, .modal, #denomModal, #historyModal, #centerModal, #confirmEntryModal, #confirmDepositModal, #modifyModal, #toast {
+  header, main, footer, .modal, #lockScreenOverlay, #denomModal, #historyModal, #centerModal, #confirmEntryModal, #confirmDepositModal, #modifyModal, #backupModal, #toast {
     display: none !important;
   }
 }
@@ -96,4 +96,14 @@ input[type=number] {
   background-color: #4f46e5;
   border: 2px solid #ffffff;
   box-shadow: 0 0 0 2px #c7d2fe;
+}
+
+/* Shake Animation for incorrect password */
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  20%, 60% { transform: translateX(-8px); }
+  40%, 80% { transform: translateX(8px); }
+}
+.animate-shake {
+  animation: shake 0.4s ease-in-out;
 }

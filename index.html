@@ -32,6 +32,77 @@
 </head>
 <body class="bg-slate-100 text-slate-800 min-h-screen flex flex-col font-sans antialiased">
 
+  <!-- ========================================== -->
+  <!-- 🔒 MASTER LOCK SCREEN OVERLAY (7-DAY REMEMBER) -->
+  <!-- ========================================== -->
+  <div id="lockScreenOverlay" class="fixed inset-0 z-[100] bg-slate-900/95 backdrop-blur-md flex items-center justify-center p-4">
+    <div id="lockCard" class="bg-white rounded-2xl max-w-sm w-full p-6 shadow-2xl border border-slate-200 text-center space-y-4">
+      
+      <!-- Shield / Lock Icon -->
+      <div class="w-14 h-14 mx-auto rounded-full bg-blue-50 text-blue-600 flex items-center justify-center border-2 border-blue-100 shadow-inner">
+        <i data-lucide="shield-check" class="w-7 h-7"></i>
+      </div>
+
+      <div>
+        <h2 class="text-lg font-black text-slate-900" id="lockScreenTitle">Personal CSP Vault</h2>
+        <p class="text-xs text-slate-500 mt-0.5" id="lockScreenSubtitle">Enter your Master Password / PIN to unlock</p>
+      </div>
+
+      <!-- Password / PIN Input Form -->
+      <form id="lockScreenForm" class="space-y-3.5 text-left">
+        <div>
+          <label class="block text-xs font-bold text-slate-700 mb-1" id="lockInputLabel">Password / PIN</label>
+          <div class="relative">
+            <span class="absolute inset-y-0 left-0 pl-3 flex items-center text-slate-400">
+              <i data-lucide="key" class="w-4 h-4"></i>
+            </span>
+            <input
+              type="password"
+              id="lockPasswordInput"
+              required
+              placeholder="Enter PIN / Password"
+              class="w-full pl-9 pr-10 py-2.5 rounded-xl border border-slate-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-100 text-sm font-mono font-bold tracking-widest text-slate-900 transition"
+            />
+            <button
+              type="button"
+              id="togglePasswordVisibilityBtn"
+              class="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-400 hover:text-slate-600"
+            >
+              <i data-lucide="eye" id="togglePasswordIcon" class="w-4 h-4"></i>
+            </button>
+          </div>
+          <p id="lockErrorMsg" class="text-rose-600 text-xs font-semibold mt-1 hidden">Incorrect password. Please try again.</p>
+        </div>
+
+        <!-- 7-Day Remember Me Checkbox -->
+        <div class="flex items-center gap-2 pt-1" id="rememberMeContainer">
+          <input
+            type="checkbox"
+            id="rememberMeCheckbox"
+            checked
+            class="w-4 h-4 rounded text-blue-600 border-slate-300 focus:ring-blue-500 cursor-pointer"
+          />
+          <label for="rememberMeCheckbox" class="text-xs text-slate-600 font-medium cursor-pointer">
+            Remember me on this device for <strong>7 days</strong>
+          </label>
+        </div>
+
+        <!-- Submit Button -->
+        <button
+          type="submit"
+          id="unlockBtn"
+          class="w-full py-2.5 px-4 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-sm shadow-md shadow-blue-600/20 flex items-center justify-center gap-2 transition"
+        >
+          <i data-lucide="lock" class="w-4 h-4"></i>
+          <span id="unlockBtnText">Unlock Site</span>
+        </button>
+      </form>
+
+      <p class="text-[11px] text-slate-400">Data is synced safely across your systems & protected.</p>
+
+    </div>
+  </div>
+
   <!-- Top Navbar -->
   <header class="bg-white border-b border-slate-200 sticky top-0 z-30 shadow-xs">
     <div class="max-w-7xl mx-auto px-4 sm:px-6 h-14 flex items-center justify-between gap-2">
@@ -43,7 +114,7 @@
         </div>
         <div class="flex items-center gap-2">
           <span class="font-bold text-slate-900 tracking-tight text-sm sm:text-base whitespace-nowrap" id="headerTitle">CSP Balance Manager</span>
-          <button id="editCenterBtn" class="text-slate-400 hover:text-slate-600" title="Edit Shop Name">
+          <button id="editCenterBtn" class="text-slate-400 hover:text-slate-600" title="Edit Shop Name / Password">
             <i data-lucide="edit-3" class="w-3.5 h-3.5"></i>
           </button>
         </div>
@@ -80,8 +151,20 @@
 
       <!-- Right Action Controls -->
       <div class="flex items-center gap-1.5 sm:gap-2">
-        <!-- Master Date Selector -->
+        <!-- Date Selector -->
         <input type="date" id="selectedDate" class="bg-slate-50 border border-slate-200 rounded-lg px-2 py-1 text-xs font-mono font-semibold text-slate-700 cursor-pointer focus:outline-none" />
+
+        <!-- Backup & Sync Button -->
+        <button id="openBackupBtn" class="px-2.5 py-1 text-xs font-semibold rounded-lg border border-slate-200 hover:bg-slate-50 text-slate-700 transition flex items-center gap-1" title="Backup & Cross-device Sync">
+          <i data-lucide="database" class="w-3.5 h-3.5 text-blue-600"></i>
+          <span class="hidden md:inline">Sync / Backup</span>
+        </button>
+
+        <!-- Lock Button -->
+        <button id="lockSiteBtn" class="px-2.5 py-1 text-xs font-semibold rounded-lg border border-slate-200 hover:bg-slate-50 text-slate-700 transition flex items-center gap-1" title="Lock site immediately">
+          <i data-lucide="lock" class="w-3.5 h-3.5 text-slate-500"></i>
+          <span class="hidden sm:inline">Lock</span>
+        </button>
 
         <!-- History -->
         <button id="openHistoryBtn" class="px-2.5 py-1 text-xs font-semibold rounded-lg border border-slate-200 hover:bg-slate-50 text-slate-700 transition flex items-center gap-1" title="View Saved History">
@@ -424,7 +507,7 @@
   </main>
 
   <!-- ========================================== -->
-  <!-- VIEW 2: DEPOSIT SECTION (NEW)              -->
+  <!-- VIEW 2: DEPOSIT SECTION                   -->
   <!-- ========================================== -->
   <main id="viewDeposit" class="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6 hidden">
 
@@ -587,9 +670,7 @@
         </div>
 
         <!-- Deposits Records List Container -->
-        <div id="depositsListContainer" class="space-y-2.5 max-h-[600px] overflow-y-auto">
-          <!-- Dynamically populated via JS -->
-        </div>
+        <div id="depositsListContainer" class="space-y-2.5 max-h-[600px] overflow-y-auto"></div>
 
       </div>
 
@@ -746,15 +827,77 @@
         </div>
 
         <!-- Payout Records List Container -->
-        <div id="payoutsListContainer" class="space-y-2.5 max-h-[600px] overflow-y-auto">
-          <!-- Dynamically populated via JS -->
-        </div>
+        <div id="payoutsListContainer" class="space-y-2.5 max-h-[600px] overflow-y-auto"></div>
 
       </div>
 
     </div>
 
   </main>
+
+  <!-- ========================================== -->
+  <!-- MODAL: BACKUP & CROSS-DEVICE SYNC VAULT    -->
+  <!-- ========================================== -->
+  <div id="backupModal" class="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 hidden">
+    <div class="bg-white rounded-2xl max-w-md w-full overflow-hidden shadow-2xl border border-slate-200 animate-pop">
+      
+      <div class="px-5 py-4 bg-slate-900 text-white flex items-center justify-between">
+        <div class="flex items-center gap-2">
+          <i data-lucide="database" class="w-5 h-5 text-blue-400"></i>
+          <h3 class="font-bold text-sm sm:text-base">Data Backup & Cross-Device Sync</h3>
+        </div>
+        <button id="closeBackupModal" class="text-slate-400 hover:text-white">
+          <i data-lucide="x" class="w-4 h-4"></i>
+        </button>
+      </div>
+
+      <div class="p-5 space-y-4">
+        
+        <!-- Live Sync Status Banner -->
+        <div class="p-3 rounded-xl border border-slate-200 bg-slate-50 flex items-center justify-between">
+          <div>
+            <div class="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+              <span id="syncServerDot" class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+              <span id="syncServerStatusText">Local Server Connected</span>
+            </div>
+            <p class="text-[11px] text-slate-500 mt-0.5" id="syncServerSubtext">Data is automatically saved on this PC and synced to connected devices.</p>
+          </div>
+          <button id="forceSyncBtn" class="px-2.5 py-1 rounded-lg text-xs font-bold bg-blue-50 text-blue-700 hover:bg-blue-100 transition">
+            Sync Now
+          </button>
+        </div>
+
+        <!-- 1. Download Backup -->
+        <div class="p-3.5 rounded-xl border border-blue-100 bg-blue-50/50 space-y-2">
+          <div class="flex items-center justify-between">
+            <span class="text-xs font-bold text-slate-800">1. Download Complete Backup (JSON)</span>
+            <span class="text-[10px] text-blue-700 font-semibold uppercase">Safe File</span>
+          </div>
+          <p class="text-xs text-slate-600">Save all hisab, deposits, payouts & settings as a single secure file on your device or Google Drive.</p>
+          <button id="downloadBackupBtn" class="w-full py-2 px-3 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold flex items-center justify-center gap-1.5 transition">
+            <i data-lucide="download" class="w-3.5 h-3.5"></i>
+            <span>Download All Data (.json)</span>
+          </button>
+        </div>
+
+        <!-- 2. Restore Backup -->
+        <div class="p-3.5 rounded-xl border border-amber-100 bg-amber-50/50 space-y-2">
+          <div class="flex items-center justify-between">
+            <span class="text-xs font-bold text-slate-800">2. Restore from Backup</span>
+            <span class="text-[10px] text-amber-700 font-semibold uppercase">Import</span>
+          </div>
+          <p class="text-xs text-slate-600">Open this site on any new computer or phone, and upload your backup file to restore 100% data.</p>
+          <label class="w-full py-2 px-3 rounded-lg border border-amber-300 bg-white hover:bg-amber-100/50 text-amber-900 text-xs font-bold flex items-center justify-center gap-1.5 cursor-pointer transition">
+            <i data-lucide="upload" class="w-3.5 h-3.5"></i>
+            <span>Upload Backup File</span>
+            <input type="file" id="restoreFileInput" accept=".json" class="hidden" />
+          </label>
+        </div>
+
+      </div>
+
+    </div>
+  </div>
 
   <!-- ========================================== -->
   <!-- MODAL: MODIFY AMOUNT & STEP HISTORY TRACKER -->
@@ -830,9 +973,7 @@
             <span>All Steps History (सभी पिछले स्टेप्स):</span>
           </h4>
           
-          <div class="pl-5 border-l-2 border-indigo-200 space-y-3" id="modifyStepsTimelineContainer">
-            <!-- Dynamically populated via JS -->
-          </div>
+          <div class="pl-5 border-l-2 border-indigo-200 space-y-3" id="modifyStepsTimelineContainer"></div>
         </div>
 
       </div>
@@ -1060,14 +1201,21 @@
     </div>
   </div>
 
-  <!-- CENTER NAME MODAL -->
+  <!-- CENTER & SECURITY DETAILS MODAL -->
   <div id="centerModal" class="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4 hidden">
     <div class="bg-white rounded-xl max-w-xs w-full overflow-hidden shadow-xl border border-slate-200 p-4 space-y-3">
-      <h3 class="font-bold text-sm text-slate-800">CSP / Shop Name</h3>
-      <input type="text" id="settingCenterName" class="w-full p-2 border border-slate-200 rounded text-xs font-semibold" placeholder="e.g. My CSP Center" />
+      <h3 class="font-bold text-sm text-slate-800">Shop & Security Settings</h3>
+      <div>
+        <label class="block text-xs font-semibold text-slate-700 mb-1">CSP / Shop Name</label>
+        <input type="text" id="settingCenterName" class="w-full p-2 border border-slate-200 rounded text-xs font-semibold" placeholder="e.g. My CSP Center" />
+      </div>
+      <div>
+        <label class="block text-xs font-semibold text-slate-700 mb-1">Change Master Password / PIN</label>
+        <input type="password" id="settingPassword" class="w-full p-2 border border-slate-200 rounded text-xs font-mono font-bold" placeholder="Leave empty to keep current" />
+      </div>
       <div class="flex justify-end gap-2 pt-1">
         <button id="cancelCenterBtn" class="px-2.5 py-1 text-xs text-slate-600">Cancel</button>
-        <button id="saveCenterBtn" class="px-3 py-1 bg-blue-600 text-white rounded text-xs font-bold">Save</button>
+        <button id="saveCenterBtn" class="px-3 py-1 bg-blue-600 text-white rounded text-xs font-bold">Save Settings</button>
       </div>
     </div>
   </div>
