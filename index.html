@@ -147,6 +147,15 @@
           <span>Kitna Baki / Diye</span>
           <span id="tabKitnaDiyeBadge" class="px-1.5 py-0.2 rounded-full bg-indigo-100 text-indigo-800 text-[10px] font-bold">0</span>
         </button>
+
+        <button
+          id="tabDeletedHistory"
+          class="px-2.5 sm:px-3 py-1 rounded-lg text-xs font-bold transition flex items-center gap-1.5 text-slate-600 hover:text-slate-900"
+        >
+          <i data-lucide="trash-2" class="w-3.5 h-3.5 text-rose-500"></i>
+          <span>Deleted History</span>
+          <span id="tabDeletedBadge" class="px-1.5 py-0.2 rounded-full bg-rose-100 text-rose-800 text-[10px] font-bold">0</span>
+        </button>
       </nav>
 
       <!-- Right Action Controls -->
@@ -649,11 +658,17 @@
               <button id="depositFilterAllBtn" class="px-2 py-1 text-xs font-semibold rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700">All</button>
             </div>
 
-            <!-- Export CSV -->
-            <button id="exportDepositsCsvBtn" class="px-2.5 py-1 rounded-lg border border-slate-200 text-xs font-semibold hover:bg-slate-50 text-slate-700 flex items-center gap-1 transition">
-              <i data-lucide="download" class="w-3.5 h-3.5 text-blue-600"></i>
-              <span>Export CSV</span>
-            </button>
+            <!-- Export CSV & Deleted Link -->
+            <div class="flex items-center gap-1.5">
+              <button id="viewDeletedDepositsBtn" class="px-2 py-1 rounded-lg border border-rose-200 text-xs font-semibold text-rose-600 bg-rose-50/70 hover:bg-rose-100 transition flex items-center gap-1" title="View Deleted Deposits">
+                <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
+                <span>Deleted (<span id="quickDeletedDepositCount">0</span>)</span>
+              </button>
+              <button id="exportDepositsCsvBtn" class="px-2.5 py-1 rounded-lg border border-slate-200 text-xs font-semibold hover:bg-slate-50 text-slate-700 flex items-center gap-1 transition">
+                <i data-lucide="download" class="w-3.5 h-3.5 text-blue-600"></i>
+                <span>Export CSV</span>
+              </button>
+            </div>
           </div>
 
           <!-- Search Input -->
@@ -806,11 +821,17 @@
               <button id="payoutFilterAllBtn" class="px-2 py-1 text-xs font-semibold rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700">All</button>
             </div>
 
-            <!-- Export CSV -->
-            <button id="exportPayoutsCsvBtn" class="px-2.5 py-1 rounded-lg border border-slate-200 text-xs font-semibold hover:bg-slate-50 text-slate-700 flex items-center gap-1 transition">
-              <i data-lucide="download" class="w-3.5 h-3.5 text-blue-600"></i>
-              <span>Export CSV</span>
-            </button>
+            <!-- Export CSV & Deleted Link -->
+            <div class="flex items-center gap-1.5">
+              <button id="viewDeletedPayoutsBtn" class="px-2 py-1 rounded-lg border border-rose-200 text-xs font-semibold text-rose-600 bg-rose-50/70 hover:bg-rose-100 transition flex items-center gap-1" title="View Deleted Udhari">
+                <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
+                <span>Deleted (<span id="quickDeletedPayoutCount">0</span>)</span>
+              </button>
+              <button id="exportPayoutsCsvBtn" class="px-2.5 py-1 rounded-lg border border-slate-200 text-xs font-semibold hover:bg-slate-50 text-slate-700 flex items-center gap-1 transition">
+                <i data-lucide="download" class="w-3.5 h-3.5 text-blue-600"></i>
+                <span>Export CSV</span>
+              </button>
+            </div>
           </div>
 
           <!-- Search Input -->
@@ -830,6 +851,116 @@
         <div id="payoutsListContainer" class="space-y-2.5 max-h-[600px] overflow-y-auto"></div>
 
       </div>
+
+    </div>
+
+  </main>
+
+  <!-- ========================================== -->
+  <!-- VIEW 4: DELETED HISTORY AUDIT TRAIL        -->
+  <!-- ========================================== -->
+  <main id="viewDeletedHistory" class="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6 hidden">
+    
+    <div class="space-y-4">
+      
+      <!-- Top Title & Stats Banner -->
+      <div class="bg-white rounded-xl border border-slate-200 p-4 sm:p-5 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div class="flex items-center gap-3">
+          <div class="w-10 h-10 rounded-xl bg-rose-50 text-rose-600 flex items-center justify-center font-bold shrink-0">
+            <i data-lucide="trash-2" class="w-5 h-5"></i>
+          </div>
+          <div>
+            <div class="flex items-center gap-2">
+              <h2 class="text-base sm:text-lg font-bold text-slate-900">Deleted Records History (हटाया गया रिकॉर्ड)</h2>
+              <span id="deletedTotalBadge" class="px-2 py-0.5 rounded-full text-xs font-bold bg-rose-100 text-rose-800">0 Items</span>
+            </div>
+            <p class="text-xs text-slate-500 mt-0.5">
+              Deposits और Udhari के डिलीट किए गए सभी रिकॉर्ड्स की पूरी हिस्ट्री — <strong>जोड़ने की तारीख/समय</strong> व <strong>डिलीट करने की तारीख/समय</strong> के साथ।
+            </p>
+          </div>
+        </div>
+
+        <!-- Quick Summary Metrics -->
+        <div class="flex items-center gap-2 sm:gap-3 shrink-0">
+          <div class="bg-rose-50/70 border border-rose-100 rounded-lg px-3 py-1.5 text-center">
+            <span class="text-[10px] font-bold text-rose-600 uppercase block">Total Deleted Amount</span>
+            <span id="deletedSummaryAmount" class="text-base font-black font-mono text-rose-700">₹0</span>
+          </div>
+          <div class="bg-emerald-50/70 border border-emerald-100 rounded-lg px-3 py-1.5 text-center">
+            <span class="text-[10px] font-bold text-emerald-700 uppercase block">Deposits Deleted</span>
+            <span id="deletedSummaryDeposits" class="text-sm font-black font-mono text-emerald-800">0 (₹0)</span>
+          </div>
+          <div class="bg-indigo-50/70 border border-indigo-100 rounded-lg px-3 py-1.5 text-center">
+            <span class="text-[10px] font-bold text-indigo-700 uppercase block">Udhari Deleted</span>
+            <span id="deletedSummaryPayouts" class="text-sm font-black font-mono text-indigo-800">0 (₹0)</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Filters & Search Toolbar -->
+      <div class="bg-white rounded-xl border border-slate-200 p-3 sm:p-4 shadow-xs space-y-3">
+        
+        <div class="flex flex-wrap items-center justify-between gap-3">
+          
+          <!-- Source/Type Filter Tabs -->
+          <div class="flex items-center gap-1 bg-slate-100 p-1 rounded-lg border border-slate-200/80">
+            <button id="delFilterTypeAll" class="px-2.5 py-1 rounded-md text-xs font-bold bg-white text-slate-800 shadow-xs">
+              All (सभी)
+            </button>
+            <button id="delFilterTypeDeposit" class="px-2.5 py-1 rounded-md text-xs font-bold text-slate-600 hover:text-slate-900">
+              Deposits Only
+            </button>
+            <button id="delFilterTypePayout" class="px-2.5 py-1 rounded-md text-xs font-bold text-slate-600 hover:text-slate-900">
+              Udhari / Diye Only
+            </button>
+          </div>
+
+          <!-- Date Filter -->
+          <div class="flex flex-wrap items-center gap-2">
+            <div class="flex items-center gap-1.5">
+              <span class="text-xs font-bold text-slate-600 flex items-center gap-1">
+                <i data-lucide="calendar" class="w-3.5 h-3.5 text-slate-400"></i>
+                <span>Deleted Date:</span>
+              </span>
+              <input
+                type="date"
+                id="deletedFilterDate"
+                class="px-2 py-1 bg-slate-50 border border-slate-200 rounded-lg text-xs font-mono font-semibold text-slate-800 cursor-pointer"
+              />
+              <button id="deletedFilterTodayBtn" class="px-2 py-1 text-xs font-semibold rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700">Today</button>
+              <button id="deletedFilterAllBtn" class="px-2 py-1 text-xs font-semibold rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700">All Dates</button>
+            </div>
+
+            <!-- Export CSV -->
+            <button id="exportDeletedCsvBtn" class="px-2.5 py-1 rounded-lg border border-slate-200 text-xs font-semibold hover:bg-slate-50 text-slate-700 flex items-center gap-1 transition">
+              <i data-lucide="download" class="w-3.5 h-3.5 text-blue-600"></i>
+              <span>Export CSV</span>
+            </button>
+
+            <!-- Clear All Deleted -->
+            <button id="clearAllDeletedBtn" class="px-2.5 py-1 rounded-lg border border-rose-200 text-xs font-semibold hover:bg-rose-50 text-rose-600 flex items-center gap-1 transition" title="Clear all deleted records permanently">
+              <i data-lucide="trash" class="w-3.5 h-3.5"></i>
+              <span>Clear Trash</span>
+            </button>
+          </div>
+
+        </div>
+
+        <!-- Search Bar -->
+        <div class="relative">
+          <span class="absolute inset-y-0 left-0 pl-3 flex items-center text-slate-400"><i data-lucide="search" class="w-3.5 h-3.5"></i></span>
+          <input
+            type="text"
+            id="deletedSearchInput"
+            placeholder="Search deleted records by customer name, account number, phone, or amount..."
+            class="w-full pl-9 pr-3 py-2 rounded-lg border border-slate-200 text-xs focus:outline-none focus:border-rose-500"
+          />
+        </div>
+
+      </div>
+
+      <!-- Deleted Records Cards List Container -->
+      <div id="deletedListContainer" class="space-y-3"></div>
 
     </div>
 

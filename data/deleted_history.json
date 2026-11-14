@@ -1,0 +1,26 @@
+[
+  {
+    "id": "DEL-163935-281",
+    "originalId": "DEP-158558",
+    "type": "deposit",
+    "name": "Sanjay",
+    "account": "21420021000140596",
+    "mobile": "",
+    "amount": 18000,
+    "addedDate": "2026-11-14",
+    "addedTime": "11:45 PM",
+    "addedTimestamp": "2026-11-14T18:15:58.558Z",
+    "deletedDate": "2026-11-14",
+    "deletedTime": "11:46:03 PM",
+    "formattedDeletedDate": "14 Nov 2026",
+    "deletedTimestamp": "2026-11-14T18:16:03.934Z",
+    "history": [
+      {
+        "step": 1,
+        "amount": 18000,
+        "timestamp": "2026-11-14 11:45 PM",
+        "reason": "Initial Deposit Recorded"
+      }
+    ]
+  }
+]

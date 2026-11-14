@@ -16,6 +16,7 @@ const RECORDS_FILE = path.join(DATA_DIR, 'records.json');
 const DEPOSITS_FILE = path.join(DATA_DIR, 'deposits.json');
 const PAYOUTS_FILE = path.join(DATA_DIR, 'payouts.json');
 const SETTINGS_FILE = path.join(DATA_DIR, 'settings.json');
+const DELETED_FILE = path.join(DATA_DIR, 'deleted_history.json');
 
 // Ensure data directory exists
 if (!fs.existsSync(DATA_DIR)) {
@@ -32,6 +33,7 @@ ensureFile(RECORDS_FILE, {});
 ensureFile(DEPOSITS_FILE, []);
 ensureFile(PAYOUTS_FILE, []);
 ensureFile(SETTINGS_FILE, { centerName: 'CSP Balance Manager', password: '' });
+ensureFile(DELETED_FILE, []);
 
 // MIME types
 const MIME_TYPES = {
@@ -135,6 +137,7 @@ const server = http.createServer(async (req, res) => {
     const deposits = readJson(DEPOSITS_FILE, []);
     const payouts = readJson(PAYOUTS_FILE, []);
     const settings = readJson(SETTINGS_FILE, {});
+    const deleted = readJson(DELETED_FILE, []);
 
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({
@@ -143,12 +146,13 @@ const server = http.createServer(async (req, res) => {
       deposits: deposits,
       payouts: payouts,
       settings: settings,
+      deleted: deleted,
       serverTime: new Date().toISOString()
     }));
     return;
   }
 
-  // 3. POST /api/sync-all - Save all data (records, deposits, payouts, settings)
+  // 3. POST /api/sync-all - Save all data (records, deposits, payouts, settings, deleted)
   if (req.method === 'POST' && pathname === '/api/sync-all') {
     try {
       const body = await parseBody(req);
@@ -156,6 +160,7 @@ const server = http.createServer(async (req, res) => {
       if (body.deposits) writeJson(DEPOSITS_FILE, body.deposits);
       if (body.payouts) writeJson(PAYOUTS_FILE, body.payouts);
       if (body.settings) writeJson(SETTINGS_FILE, body.settings);
+      if (body.deleted) writeJson(DELETED_FILE, body.deleted);
 
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ success: true, message: 'All data synchronized successfully' }));
@@ -271,6 +276,33 @@ const server = http.createServer(async (req, res) => {
         writeJson(SETTINGS_FILE, updated);
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ success: true, settings: updated }));
+        return;
+      } catch (err) {
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: err.message }));
+        return;
+      }
+    }
+  }
+
+  // 9. GET /api/deleted & POST /api/deleted (for deleted records audit history)
+  if (pathname === '/api/deleted') {
+    if (req.method === 'GET') {
+      const deleted = readJson(DELETED_FILE, []);
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ success: true, deleted: deleted }));
+      return;
+    }
+    if (req.method === 'POST') {
+      try {
+        const body = await parseBody(req);
+        if (Array.isArray(body)) {
+          writeJson(DELETED_FILE, body);
+        } else if (body.deleted && Array.isArray(body.deleted)) {
+          writeJson(DELETED_FILE, body.deleted);
+        }
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: true, message: 'Deleted history saved' }));
         return;
       } catch (err) {
         res.writeHead(500, { 'Content-Type': 'application/json' });

@@ -12,7 +12,7 @@
   'use strict';
 
   // --- STATE ---
-  let activeTab = 'daily'; // 'daily', 'deposit', or 'payouts'
+  let activeTab = 'daily'; // 'daily', 'deposit', 'payouts', or 'deleted'
   let activeDenomTarget = 'morning';
   let centerName = localStorage.getItem('csp_center_name') || 'CSP Balance Manager';
   let masterPassword = localStorage.getItem('csp_master_password') || '';
@@ -23,6 +23,11 @@
   let currentActiveDeposit = null;
   let activeModifyType = null; // 'deposit' or 'payout'
   let activeModifyItem = null;
+
+  // Deleted History filters
+  let deletedTypeFilter = 'all'; // 'all', 'deposit', 'payout'
+  let deletedDateFilter = '';
+  let deletedSearchQuery = '';
 
   // DOM Elements
   const el = {
@@ -50,11 +55,14 @@
     tabDepositBadge: document.getElementById('tabDepositBadge'),
     tabKitnaDiye: document.getElementById('tabKitnaDiye'),
     tabKitnaDiyeBadge: document.getElementById('tabKitnaDiyeBadge'),
+    tabDeletedHistory: document.getElementById('tabDeletedHistory'),
+    tabDeletedBadge: document.getElementById('tabDeletedBadge'),
 
     // Views
     viewDailyHisab: document.getElementById('viewDailyHisab'),
     viewDeposit: document.getElementById('viewDeposit'),
     viewKitnaDiye: document.getElementById('viewKitnaDiye'),
+    viewDeletedHistory: document.getElementById('viewDeletedHistory'),
     selectedDate: document.getElementById('selectedDate'),
 
     // Top Controls
@@ -166,6 +174,28 @@
     modifyNewAmountInput: document.getElementById('modifyNewAmountInput'),
     modifyReasonInput: document.getElementById('modifyReasonInput'),
     modifyStepsTimelineContainer: document.getElementById('modifyStepsTimelineContainer'),
+
+    // ===================================
+    // DELETED HISTORY ELEMENTS
+    // ===================================
+    deletedTotalBadge: document.getElementById('deletedTotalBadge'),
+    deletedSummaryAmount: document.getElementById('deletedSummaryAmount'),
+    deletedSummaryDeposits: document.getElementById('deletedSummaryDeposits'),
+    deletedSummaryPayouts: document.getElementById('deletedSummaryPayouts'),
+    delFilterTypeAll: document.getElementById('delFilterTypeAll'),
+    delFilterTypeDeposit: document.getElementById('delFilterTypeDeposit'),
+    delFilterTypePayout: document.getElementById('delFilterTypePayout'),
+    deletedFilterDate: document.getElementById('deletedFilterDate'),
+    deletedFilterTodayBtn: document.getElementById('deletedFilterTodayBtn'),
+    deletedFilterAllBtn: document.getElementById('deletedFilterAllBtn'),
+    exportDeletedCsvBtn: document.getElementById('exportDeletedCsvBtn'),
+    clearAllDeletedBtn: document.getElementById('clearAllDeletedBtn'),
+    deletedSearchInput: document.getElementById('deletedSearchInput'),
+    deletedListContainer: document.getElementById('deletedListContainer'),
+    viewDeletedDepositsBtn: document.getElementById('viewDeletedDepositsBtn'),
+    viewDeletedPayoutsBtn: document.getElementById('viewDeletedPayoutsBtn'),
+    quickDeletedDepositCount: document.getElementById('quickDeletedDepositCount'),
+    quickDeletedPayoutCount: document.getElementById('quickDeletedPayoutCount'),
 
     // ===================================
     // BACKUP & SYNC MODAL
@@ -401,6 +431,13 @@
           localStorage.setItem('csp_history', JSON.stringify(merged));
         }
 
+        // 5. Merge Deleted History
+        if (Array.isArray(data.deleted) && data.deleted.length > 0) {
+          const localDeleted = getDeletedHistory();
+          const merged = mergeArraysById(localDeleted, data.deleted);
+          localStorage.setItem('csp_deleted_history', JSON.stringify(merged));
+        }
+
         updateSyncUiStatus(true);
         return;
       }
@@ -452,7 +489,8 @@
         settings: {
           centerName: centerName,
           password: masterPassword
-        }
+        },
+        deleted: getDeletedHistory()
       };
 
       await fetch('/api/sync-all', {
@@ -486,7 +524,8 @@
       masterPassword: masterPassword,
       history: JSON.parse(localStorage.getItem('csp_history') || '[]'),
       deposits: getDeposits(),
-      payouts: getPayouts()
+      payouts: getPayouts(),
+      deleted: getDeletedHistory()
     };
 
     const dateStr = new Date().toISOString().split('T')[0];
@@ -534,10 +573,14 @@
           if (Array.isArray(data.history)) {
             localStorage.setItem('csp_history', JSON.stringify(data.history));
           }
+          if (Array.isArray(data.deleted)) {
+            localStorage.setItem('csp_deleted_history', JSON.stringify(data.deleted));
+          }
 
           syncAllDataToServer();
           renderDepositsList();
           renderPayoutsList();
+          renderDeletedList();
           loadDayData(el.selectedDate.value);
           el.backupModal.classList.add('hidden');
           showToast('All data restored 100% successfully!');
@@ -572,6 +615,7 @@
 
     renderDepositsList();
     renderPayoutsList();
+    renderDeletedList();
 
     attachListeners();
     calculate();
@@ -587,14 +631,17 @@
     const activeDailyClass = 'px-2.5 sm:px-3 py-1 rounded-lg text-xs font-bold transition flex items-center gap-1.5 bg-white text-blue-700 shadow-xs';
     const activeDepositClass = 'px-2.5 sm:px-3 py-1 rounded-lg text-xs font-bold transition flex items-center gap-1.5 bg-white text-emerald-700 shadow-xs';
     const activePayoutClass = 'px-2.5 sm:px-3 py-1 rounded-lg text-xs font-bold transition flex items-center gap-1.5 bg-white text-indigo-700 shadow-xs';
+    const activeDeletedClass = 'px-2.5 sm:px-3 py-1 rounded-lg text-xs font-bold transition flex items-center gap-1.5 bg-white text-rose-700 shadow-xs';
 
     el.tabDailyHisab.className = inactiveClass;
     el.tabDeposit.className = inactiveClass;
     el.tabKitnaDiye.className = inactiveClass;
+    el.tabDeletedHistory.className = inactiveClass;
 
     el.viewDailyHisab.classList.add('hidden');
     el.viewDeposit.classList.add('hidden');
     el.viewKitnaDiye.classList.add('hidden');
+    el.viewDeletedHistory.classList.add('hidden');
 
     if (tab === 'daily') {
       el.viewDailyHisab.classList.remove('hidden');
@@ -603,10 +650,14 @@
       el.viewDeposit.classList.remove('hidden');
       el.tabDeposit.className = activeDepositClass;
       renderDepositsList();
-    } else {
+    } else if (tab === 'payouts') {
       el.viewKitnaDiye.classList.remove('hidden');
       el.tabKitnaDiye.className = activePayoutClass;
       renderPayoutsList();
+    } else if (tab === 'deleted') {
+      el.viewDeletedHistory.classList.remove('hidden');
+      el.tabDeletedHistory.className = activeDeletedClass;
+      renderDeletedList();
     }
 
     if (window.lucide) window.lucide.createIcons();
@@ -1057,10 +1108,14 @@
     el.depositsListContainer.querySelectorAll('.deposit-del-btn').forEach(btn => {
       btn.addEventListener('click', (e) => {
         const id = e.currentTarget.getAttribute('data-id');
-        if (confirm('Delete this deposit entry?')) {
+        const itemToDelete = getDeposits().find(item => item.id === id);
+        if (confirm(`Delete deposit entry for ${itemToDelete ? itemToDelete.name : 'customer'}? It will be safely preserved in Deleted History.`)) {
+          if (itemToDelete) {
+            addToDeletedHistory(itemToDelete, 'deposit');
+          }
           const list = getDeposits().filter(item => item.id !== id);
           saveDeposits(list);
-          showToast('Deposit entry deleted');
+          showToast('Deposit deleted & saved to Deleted History');
         }
       });
     });
@@ -1322,10 +1377,14 @@ Thank you for visiting!`;
     el.payoutsListContainer.querySelectorAll('.payout-del-btn').forEach(btn => {
       btn.addEventListener('click', (e) => {
         const id = e.currentTarget.getAttribute('data-id');
-        if (confirm('Delete this payout entry?')) {
+        const itemToDelete = getPayouts().find(item => item.id === id);
+        if (confirm(`Delete udhari entry for ${itemToDelete ? itemToDelete.name : 'customer'}? It will be safely preserved in Deleted History.`)) {
+          if (itemToDelete) {
+            addToDeletedHistory(itemToDelete, 'payout');
+          }
           const list = getPayouts().filter(item => item.id !== id);
           savePayouts(list);
-          showToast('Entry deleted');
+          showToast('Entry deleted & saved to Deleted History');
         }
       });
     });
@@ -1358,6 +1417,389 @@ Thank you for visiting!`;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
+  }
+
+  // =========================================================================
+  // SECTION: DELETED HISTORY AUDIT TRAIL
+  // =========================================================================
+  function getDeletedHistory() {
+    return JSON.parse(localStorage.getItem('csp_deleted_history') || '[]');
+  }
+
+  function saveDeletedHistory(list) {
+    localStorage.setItem('csp_deleted_history', JSON.stringify(list));
+    renderDeletedList();
+    syncAllDataToServer();
+  }
+
+  function addToDeletedHistory(item, type) {
+    const now = new Date();
+    const deletedDate = now.toISOString().split('T')[0];
+    const deletedTime = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    const formattedDeletedDate = now.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+
+    let addedDate = 'N/A';
+    let addedTime = 'N/A';
+    if (type === 'deposit') {
+      addedDate = item.paymentDate || (item.timestamp ? item.timestamp.split('T')[0] : 'N/A');
+      addedTime = item.formattedTime || (item.timestamp ? new Date(item.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'N/A');
+    } else {
+      addedDate = item.date || item.formattedDate || (item.timestamp ? item.timestamp.split('T')[0] : 'N/A');
+      addedTime = item.formattedTime || (item.timestamp ? new Date(item.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'N/A');
+    }
+
+    const deletedRecord = {
+      id: 'DEL-' + Date.now().toString().slice(-6) + '-' + Math.floor(Math.random() * 1000),
+      originalId: item.id || '',
+      type: type, // 'deposit' or 'payout'
+      name: item.name || 'Unknown Customer',
+      account: item.account || '',
+      mobile: item.mobile || '',
+      amount: Number(item.amount) || 0,
+      // Details of Add
+      addedDate: addedDate,
+      addedTime: addedTime,
+      addedTimestamp: item.timestamp || now.toISOString(),
+      // Details of Delete
+      deletedDate: deletedDate,
+      deletedTime: deletedTime,
+      formattedDeletedDate: formattedDeletedDate,
+      deletedTimestamp: now.toISOString(),
+      // Step History
+      history: Array.isArray(item.history) ? item.history : []
+    };
+
+    const list = getDeletedHistory();
+    list.unshift(deletedRecord);
+    saveDeletedHistory(list);
+  }
+
+  function restoreDeletedItem(id) {
+    const list = getDeletedHistory();
+    const item = list.find(d => d.id === id);
+    if (!item) return;
+
+    const label = item.type === 'deposit' ? 'deposit' : 'udhari';
+    if (!confirm(`Restore ${label} record of ₹${item.amount.toLocaleString('en-IN')} for ${item.name}?`)) {
+      return;
+    }
+
+    if (item.type === 'deposit') {
+      const deposits = getDeposits();
+      const restored = {
+        id: item.originalId || ('DEP-' + Date.now().toString().slice(-6)),
+        name: item.name,
+        account: item.account,
+        amount: item.amount,
+        paymentDate: item.addedDate !== 'N/A' ? item.addedDate : new Date().toISOString().split('T')[0],
+        timestamp: item.addedTimestamp || new Date().toISOString(),
+        formattedTime: item.addedTime !== 'N/A' ? item.addedTime : new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        history: item.history && item.history.length > 0 ? item.history : [
+          { step: 1, amount: item.amount, timestamp: `${item.addedDate} ${item.addedTime}`, reason: 'Restored from Deleted History' }
+        ]
+      };
+      deposits.unshift(restored);
+      saveDeposits(deposits);
+      showToast(`Deposit of ₹${item.amount.toLocaleString('en-IN')} for ${item.name} restored!`);
+    } else {
+      const payouts = getPayouts();
+      const restored = {
+        id: item.originalId || ('PAY-' + Date.now().toString().slice(-6)),
+        date: item.addedDate !== 'N/A' ? item.addedDate : new Date().toISOString().split('T')[0],
+        timestamp: item.addedTimestamp || new Date().toISOString(),
+        formattedTime: item.addedTime !== 'N/A' ? item.addedTime : new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        formattedDate: item.addedDate !== 'N/A' ? item.addedDate : new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }),
+        name: item.name,
+        amount: item.amount,
+        mobile: item.mobile,
+        history: item.history && item.history.length > 0 ? item.history : [
+          { step: 1, amount: item.amount, timestamp: `${item.addedDate} ${item.addedTime}`, reason: 'Restored from Deleted History' }
+        ]
+      };
+      payouts.unshift(restored);
+      savePayouts(payouts);
+      showToast(`Udhari entry of ₹${item.amount.toLocaleString('en-IN')} for ${item.name} restored!`);
+    }
+
+    const updatedList = list.filter(d => d.id !== id);
+    saveDeletedHistory(updatedList);
+  }
+
+  function permanentlyDelete(id) {
+    if (confirm('Permanently delete this record? This action cannot be undone.')) {
+      const list = getDeletedHistory().filter(d => d.id !== id);
+      saveDeletedHistory(list);
+      showToast('Record permanently deleted');
+    }
+  }
+
+  function clearAllDeleted() {
+    const list = getDeletedHistory();
+    if (list.length === 0) {
+      showToast('Deleted History is already empty');
+      return;
+    }
+    if (confirm('Permanently clear all deleted records? This will erase all audit logs in Deleted History.')) {
+      saveDeletedHistory([]);
+      showToast('Deleted history cleared completely');
+    }
+  }
+
+  function setDeletedTypeFilter(type) {
+    deletedTypeFilter = type;
+    const activeClass = 'px-2.5 py-1 rounded-md text-xs font-bold bg-white text-slate-800 shadow-xs';
+    const inactiveClass = 'px-2.5 py-1 rounded-md text-xs font-bold text-slate-600 hover:text-slate-900';
+
+    el.delFilterTypeAll.className = type === 'all' ? activeClass : inactiveClass;
+    el.delFilterTypeDeposit.className = type === 'deposit' ? activeClass : inactiveClass;
+    el.delFilterTypePayout.className = type === 'payout' ? activeClass : inactiveClass;
+
+    renderDeletedList();
+  }
+
+  function exportDeletedCsv() {
+    const list = getDeletedHistory();
+    if (list.length === 0) {
+      alert('No deleted records to export!');
+      return;
+    }
+
+    const headers = [
+      'Type',
+      'Customer Name',
+      'Account / Mobile',
+      'Amount (INR)',
+      'Date Added (Original)',
+      'Time Added',
+      'Date Deleted',
+      'Time Deleted',
+      'Original ID'
+    ];
+
+    const rows = list.map(item => [
+      item.type === 'deposit' ? 'Deposit' : 'Udhari',
+      `"${(item.name || '').replace(/"/g, '""')}"`,
+      `"${item.type === 'deposit' ? item.account : (item.mobile ? '+91 ' + item.mobile : '')}"`,
+      item.amount,
+      item.addedDate,
+      item.addedTime,
+      item.deletedDate,
+      item.deletedTime,
+      item.originalId || item.id
+    ]);
+
+    const csvContent = 'data:text/csv;charset=utf-8,' + [headers.join(','), ...rows.map(e => e.join(','))].join('\n');
+    const link = document.createElement('a');
+    link.setAttribute('href', encodeURI(csvContent));
+    link.setAttribute('download', `CSP_Deleted_History_${new Date().toISOString().split('T')[0]}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  }
+
+  function renderDeletedList() {
+    const allList = getDeletedHistory();
+
+    // Badges & Metrics
+    el.tabDeletedBadge.innerText = allList.length;
+    el.deletedTotalBadge.innerText = `${allList.length} Item${allList.length === 1 ? '' : 's'}`;
+
+    const depositItems = allList.filter(d => d.type === 'deposit');
+    const payoutItems = allList.filter(d => d.type === 'payout');
+
+    el.quickDeletedDepositCount.innerText = depositItems.length;
+    el.quickDeletedPayoutCount.innerText = payoutItems.length;
+
+    const totalDeletedAmount = allList.reduce((sum, item) => sum + (Number(item.amount) || 0), 0);
+    const depositDeletedAmount = depositItems.reduce((sum, item) => sum + (Number(item.amount) || 0), 0);
+    const payoutDeletedAmount = payoutItems.reduce((sum, item) => sum + (Number(item.amount) || 0), 0);
+
+    el.deletedSummaryAmount.innerText = '₹' + totalDeletedAmount.toLocaleString('en-IN');
+    el.deletedSummaryDeposits.innerText = `${depositItems.length} (₹${depositDeletedAmount.toLocaleString('en-IN')})`;
+    el.deletedSummaryPayouts.innerText = `${payoutItems.length} (₹${payoutDeletedAmount.toLocaleString('en-IN')})`;
+
+    // Filter List
+    let filtered = allList;
+    if (deletedTypeFilter !== 'all') {
+      filtered = filtered.filter(item => item.type === deletedTypeFilter);
+    }
+    if (deletedDateFilter) {
+      filtered = filtered.filter(item => item.deletedDate === deletedDateFilter);
+    }
+    if (deletedSearchQuery) {
+      filtered = filtered.filter(item => {
+        const q = deletedSearchQuery;
+        const nameMatch = (item.name || '').toLowerCase().includes(q);
+        const accMatch = (item.account || '').toLowerCase().includes(q);
+        const mobMatch = (item.mobile || '').toLowerCase().includes(q);
+        const amtMatch = String(item.amount || '').includes(q);
+        const dateMatch = (item.addedDate || '').includes(q) || (item.deletedDate || '').includes(q);
+        return nameMatch || accMatch || mobMatch || amtMatch || dateMatch;
+      });
+    }
+
+    el.deletedListContainer.innerHTML = '';
+
+    if (filtered.length === 0) {
+      el.deletedListContainer.innerHTML = `
+        <div class="bg-white rounded-xl border border-slate-200 p-8 sm:p-12 text-center space-y-3">
+          <div class="w-12 h-12 rounded-full bg-slate-100 text-slate-400 flex items-center justify-center mx-auto">
+            <i data-lucide="trash-2" class="w-6 h-6"></i>
+          </div>
+          <div class="text-sm font-bold text-slate-700">No Deleted Records Found</div>
+          <p class="text-xs text-slate-400 max-w-sm mx-auto">
+            Whenever any Deposit or Udhari entry is deleted, it will be safely logged here with complete Add and Delete timestamps.
+          </p>
+        </div>
+      `;
+      if (window.lucide) window.lucide.createIcons();
+      return;
+    }
+
+    filtered.forEach(item => {
+      const isDeposit = item.type === 'deposit';
+      const borderClass = isDeposit ? 'border-l-4 border-l-emerald-500' : 'border-l-4 border-l-indigo-500';
+      const typeBadge = isDeposit
+        ? `<span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-800 border border-emerald-200 flex items-center gap-1"><i data-lucide="arrow-down-circle" class="w-3 h-3 text-emerald-600"></i> Deposit (खाता जमा)</span>`
+        : `<span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-indigo-50 text-indigo-800 border border-indigo-200 flex items-center gap-1"><i data-lucide="hand-coins" class="w-3 h-3 text-indigo-600"></i> Udhari / Diye</span>`;
+
+      const accountOrMobile = isDeposit
+        ? `A/c: <span class="font-mono font-bold text-slate-800">${item.account || 'N/A'}</span>`
+        : `Mobile: <span class="font-mono font-bold text-slate-800">${item.mobile ? '+91 ' + item.mobile : 'Not provided'}</span>`;
+
+      const hasHistory = Array.isArray(item.history) && item.history.length > 1;
+
+      const card = document.createElement('div');
+      card.className = `bg-white rounded-xl border border-slate-200 p-4 shadow-xs space-y-3 hover:border-slate-300 transition ${borderClass}`;
+      card.innerHTML = `
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-3">
+          <div class="flex items-center gap-2 flex-wrap">
+            ${typeBadge}
+            <h3 class="text-base font-bold text-slate-900">${item.name}</h3>
+            <span class="text-xs text-slate-400">|</span>
+            <span class="text-xs text-slate-600">${accountOrMobile}</span>
+          </div>
+
+          <div class="flex items-center gap-3">
+            <div class="text-right">
+              <span class="text-[10px] uppercase font-bold text-slate-400 block">Amount Deleted</span>
+              <span class="text-lg font-black font-mono text-rose-700 line-through">₹${item.amount.toLocaleString('en-IN')}</span>
+            </div>
+
+            <!-- Action Buttons: Restore & Delete Permanently -->
+            <div class="flex items-center gap-1 pl-2 border-l border-slate-200">
+              <button class="restore-del-btn px-2.5 py-1.5 rounded-lg bg-emerald-50 hover:bg-emerald-100 text-emerald-700 text-xs font-bold transition flex items-center gap-1 border border-emerald-200" data-id="${item.id}" title="Restore back to active ledger">
+                <i data-lucide="rotate-ccw" class="w-3.5 h-3.5"></i>
+                <span>Restore (वापस लाएं)</span>
+              </button>
+              <button class="permanent-del-btn p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition" data-id="${item.id}" title="Permanently delete from audit log">
+                <i data-lucide="trash" class="w-3.5 h-3.5"></i>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- 2-Box Comparison: Details of ADD vs Details of DELETE -->
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
+          
+          <!-- Box 1: Details of ADD -->
+          <div class="p-3 rounded-lg bg-emerald-50/50 border border-emerald-100 space-y-1.5">
+            <div class="flex items-center justify-between font-bold text-emerald-900 border-b border-emerald-200/60 pb-1">
+              <span class="flex items-center gap-1">
+                <i data-lucide="plus-circle" class="w-3.5 h-3.5 text-emerald-600"></i>
+                <span>Details of ADD (कब जोड़ा गया था)</span>
+              </span>
+              <span class="font-mono text-[10px] text-emerald-700">${item.originalId || item.id}</span>
+            </div>
+            <div class="grid grid-cols-2 gap-2 text-[11px] pt-1">
+              <div>
+                <span class="text-slate-500 block">Payment / Trans Date:</span>
+                <strong class="text-slate-800 font-mono text-xs">${item.addedDate}</strong>
+              </div>
+              <div>
+                <span class="text-slate-500 block">Time Added:</span>
+                <strong class="text-slate-800 font-mono text-xs">${item.addedTime}</strong>
+              </div>
+            </div>
+          </div>
+
+          <!-- Box 2: Details of DELETE -->
+          <div class="p-3 rounded-lg bg-rose-50/50 border border-rose-100 space-y-1.5">
+            <div class="flex items-center justify-between font-bold text-rose-900 border-b border-rose-200/60 pb-1">
+              <span class="flex items-center gap-1">
+                <i data-lucide="trash-2" class="w-3.5 h-3.5 text-rose-600"></i>
+                <span>Details of DELETE (कब हटाया गया)</span>
+              </span>
+              <span class="px-1.5 py-0.2 rounded text-[10px] font-bold bg-rose-100 text-rose-800">DELETED</span>
+            </div>
+            <div class="grid grid-cols-2 gap-2 text-[11px] pt-1">
+              <div>
+                <span class="text-slate-500 block">Date of Deletion:</span>
+                <strong class="text-rose-700 font-mono text-xs">${item.deletedDate}</strong>
+              </div>
+              <div>
+                <span class="text-slate-500 block">Time of Deletion:</span>
+                <strong class="text-rose-700 font-mono text-xs">${item.deletedTime}</strong>
+              </div>
+            </div>
+          </div>
+
+        </div>
+
+        ${hasHistory ? `
+          <!-- Collapsible Modification Steps Prior to Deletion -->
+          <div class="pt-1">
+            <button class="toggle-del-history-btn text-[11px] font-bold text-slate-500 hover:text-slate-800 flex items-center gap-1 transition" data-id="${item.id}">
+              <i data-lucide="history" class="w-3 h-3 text-indigo-500"></i>
+              <span>View ${item.history.length} modification step(s) recorded before deletion</span>
+            </button>
+            <div id="del-steps-${item.id}" class="hidden mt-2 p-3 bg-slate-50 rounded-lg border border-slate-200 text-xs space-y-1.5">
+              ${item.history.map(s => `
+                <div class="flex items-center justify-between text-[11px] border-b border-slate-200/50 last:border-none pb-1">
+                  <div>
+                    <span class="font-bold text-slate-700">Step #${s.step}:</span>
+                    <span class="text-slate-500">${s.reason || 'Amount updated'}</span>
+                    <span class="text-[10px] text-slate-400">(${s.timestamp})</span>
+                  </div>
+                  <span class="font-mono font-bold text-slate-900">₹${s.amount.toLocaleString('en-IN')}</span>
+                </div>
+              `).join('')}
+            </div>
+          </div>
+        ` : ''}
+      `;
+
+      el.deletedListContainer.appendChild(card);
+    });
+
+    // Wire up Restore buttons
+    el.deletedListContainer.querySelectorAll('.restore-del-btn').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        const id = e.currentTarget.getAttribute('data-id');
+        restoreDeletedItem(id);
+      });
+    });
+
+    // Wire up Permanent Delete buttons
+    el.deletedListContainer.querySelectorAll('.permanent-del-btn').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        const id = e.currentTarget.getAttribute('data-id');
+        permanentlyDelete(id);
+      });
+    });
+
+    // Wire up Toggle History buttons
+    el.deletedListContainer.querySelectorAll('.toggle-del-history-btn').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        const id = e.currentTarget.getAttribute('data-id');
+        const box = document.getElementById(`del-steps-${id}`);
+        if (box) {
+          box.classList.toggle('hidden');
+        }
+      });
+    });
+
+    if (window.lucide) window.lucide.createIcons();
   }
 
   // =========================================================================
@@ -1602,6 +2044,41 @@ Thank you for visiting!`;
     el.tabDailyHisab.addEventListener('click', () => switchTab('daily'));
     el.tabDeposit.addEventListener('click', () => switchTab('deposit'));
     el.tabKitnaDiye.addEventListener('click', () => switchTab('payouts'));
+    el.tabDeletedHistory.addEventListener('click', () => switchTab('deleted'));
+    el.viewDeletedDepositsBtn.addEventListener('click', () => {
+      switchTab('deleted');
+      setDeletedTypeFilter('deposit');
+    });
+    el.viewDeletedPayoutsBtn.addEventListener('click', () => {
+      switchTab('deleted');
+      setDeletedTypeFilter('payout');
+    });
+
+    // Deleted History Filters & Actions
+    el.delFilterTypeAll.addEventListener('click', () => setDeletedTypeFilter('all'));
+    el.delFilterTypeDeposit.addEventListener('click', () => setDeletedTypeFilter('deposit'));
+    el.delFilterTypePayout.addEventListener('click', () => setDeletedTypeFilter('payout'));
+    el.deletedFilterDate.addEventListener('change', () => {
+      deletedDateFilter = el.deletedFilterDate.value;
+      renderDeletedList();
+    });
+    el.deletedFilterTodayBtn.addEventListener('click', () => {
+      const today = new Date().toISOString().split('T')[0];
+      el.deletedFilterDate.value = today;
+      deletedDateFilter = today;
+      renderDeletedList();
+    });
+    el.deletedFilterAllBtn.addEventListener('click', () => {
+      el.deletedFilterDate.value = '';
+      deletedDateFilter = '';
+      renderDeletedList();
+    });
+    el.deletedSearchInput.addEventListener('input', (e) => {
+      deletedSearchQuery = e.target.value.toLowerCase().trim();
+      renderDeletedList();
+    });
+    el.exportDeletedCsvBtn.addEventListener('click', exportDeletedCsv);
+    el.clearAllDeletedBtn.addEventListener('click', clearAllDeleted);
 
     // Deposit Form Submit & Filters
     el.depositForm.addEventListener('submit', handleDepositSubmit);
