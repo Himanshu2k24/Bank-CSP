@@ -1,1 +1,13 @@
-{}
+{
+  "2026-11-16": {
+    "date": "2026-11-16",
+    "accountMorning": 50000,
+    "morningCash": 25000,
+    "paymentDue": 0,
+    "udhari": 0,
+    "accountNight": 0,
+    "cashNight": 0,
+    "homeUse": 0,
+    "updatedAt": "2026-11-16T05:22:26.334Z"
+  }
+}
