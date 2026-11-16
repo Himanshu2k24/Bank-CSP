@@ -62,7 +62,7 @@ function getTmpData() {
     records: {},
     deposits: [],
     payouts: [],
-    settings: { centerName: 'CSP Daily Balance Manager', password: '' },
+    settings: { centerName: 'CSP Daily Balance Manager', username: 'admin', password: '' },
     deleted: []
   };
 }
@@ -97,7 +97,7 @@ module.exports = async (req, res) => {
   vaultData.records = vaultData.records || {};
   vaultData.deposits = vaultData.deposits || [];
   vaultData.payouts = vaultData.payouts || [];
-  vaultData.settings = vaultData.settings || { centerName: 'CSP Daily Balance Manager', password: '' };
+  vaultData.settings = vaultData.settings || { centerName: 'CSP Daily Balance Manager', username: 'admin', password: '' };
   vaultData.deleted = vaultData.deleted || [];
 
   // 1. GET /api/status
@@ -232,6 +232,25 @@ module.exports = async (req, res) => {
       saveTmpData(vaultData);
     }
     return res.status(200).json({ success: true, message: 'Deleted history saved' });
+  }
+
+  // 10. Git Status & Sync (Cloud Mock)
+  if (pathname === '/api/git-status' || pathname.endsWith('/git-status')) {
+    return res.status(200).json({
+      success: true,
+      enabled: false,
+      environment: 'vercel-cloud',
+      repo: 'https://github.com/Himanshu2k24/Bank-CSP.git',
+      branch: 'main',
+      message: 'Git auto-sync operates on local kiosk server'
+    });
+  }
+
+  if (pathname === '/api/git-sync' || pathname.endsWith('/git-sync')) {
+    return res.status(200).json({
+      success: true,
+      message: 'Git sync requested (handled on local kiosk server)'
+    });
   }
 
   return res.status(404).json({ error: 'Endpoint not found' });

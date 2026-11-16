@@ -9,6 +9,7 @@ const fs = require('fs');
 const path = require('path');
 const os = require('os');
 const url = require('url');
+const { exec } = require('child_process');
 
 const PORT = process.env.PORT || 3000;
 const DATA_DIR = path.join(__dirname, 'data');
@@ -32,8 +33,79 @@ function ensureFile(filePath, defaultData) {
 ensureFile(RECORDS_FILE, {});
 ensureFile(DEPOSITS_FILE, []);
 ensureFile(PAYOUTS_FILE, []);
-ensureFile(SETTINGS_FILE, { centerName: 'CSP Balance Manager', password: '' });
+ensureFile(SETTINGS_FILE, { centerName: 'CSP Balance Manager', username: 'admin', password: '' });
 ensureFile(DELETED_FILE, []);
+
+// =========================================================================
+// 🚀 GITHUB AUTO-SYNC ENGINE (AUTO-COMMITS & PUSHES TO GITHUB REPO)
+// =========================================================================
+let gitSyncTimeout = null;
+let lastGitSyncTime = null;
+let lastGitSyncStatus = 'Auto-Sync Active (Himanshu2k24/Bank-CSP)';
+let lastGitSyncMessage = 'Ready';
+
+function scheduleGitSync(actionDescription = 'update data') {
+  clearTimeout(gitSyncTimeout);
+  lastGitSyncStatus = `Syncing: ${actionDescription}...`;
+  // Debounce by 2 seconds so rapid operations are batched cleanly
+  gitSyncTimeout = setTimeout(() => {
+    executeGitSync(actionDescription);
+  }, 2000);
+}
+
+function executeGitSync(actionDescription = 'update data') {
+  return new Promise((resolve) => {
+    const timestamp = new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' });
+    const commitMsg = `Auto-sync: ${actionDescription} [${timestamp}]`;
+
+    // 1. Stage all data/*.json files
+    exec('git add data/*.json', { cwd: __dirname }, (addErr) => {
+      if (addErr) {
+        console.warn('[Git Auto-Sync] git add error:', addErr.message);
+        lastGitSyncStatus = 'Add Failed: ' + addErr.message;
+        return resolve({ success: false, error: addErr.message });
+      }
+
+      // Check if any staged changes exist
+      exec('git diff --cached --quiet', { cwd: __dirname }, (diffErr) => {
+        // diffErr is null when exit code is 0 (i.e. No changes staged)
+        if (!diffErr) {
+          lastGitSyncTime = new Date().toISOString();
+          lastGitSyncStatus = 'Repository is already up-to-date';
+          return resolve({ success: true, message: 'Working tree clean, nothing new to commit or push' });
+        }
+
+        // 2. Commit changes
+        exec(`git commit -m "${commitMsg.replace(/"/g, '\\"')}"`, { cwd: __dirname }, (commitErr, commitOut, commitStderr) => {
+          const combinedMsg = (commitOut || '') + ' ' + (commitStderr || '') + ' ' + (commitErr ? commitErr.message : '');
+          if (combinedMsg.includes('nothing to commit')) {
+            lastGitSyncTime = new Date().toISOString();
+            lastGitSyncStatus = 'Repository is already up-to-date';
+            return resolve({ success: true, message: 'Nothing to commit' });
+          }
+
+          // 3. Push to origin main
+          exec('git push origin main', { cwd: __dirname }, (pushErr, pushOut, pushStderr) => {
+            if (pushErr) {
+              console.error('[Git Auto-Sync] git push warning:', pushErr.message);
+              lastGitSyncStatus = 'Push Failed: ' + pushErr.message;
+              resolve({ success: false, error: pushErr.message });
+            } else {
+              lastGitSyncTime = new Date().toISOString();
+              lastGitSyncStatus = 'Pushed to GitHub: ' + commitMsg;
+              lastGitSyncMessage = commitMsg;
+              console.log(`================================================================`);
+              console.log(`[Git Auto-Sync] SUCCESS! Pushed to GitHub (Himanshu2k24/Bank-CSP):`);
+              console.log(` > ${commitMsg}`);
+              console.log(`================================================================`);
+              resolve({ success: true, message: commitMsg, timestamp: lastGitSyncTime });
+            }
+          });
+        });
+      });
+    });
+  });
+}
 
 // MIME types
 const MIME_TYPES = {
@@ -162,6 +234,8 @@ const server = http.createServer(async (req, res) => {
       if (body.settings) writeJson(SETTINGS_FILE, body.settings);
       if (body.deleted) writeJson(DELETED_FILE, body.deleted);
 
+      scheduleGitSync('Full data synchronized');
+
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ success: true, message: 'All data synchronized successfully' }));
       return;
@@ -196,6 +270,8 @@ const server = http.createServer(async (req, res) => {
       records[body.date] = merged;
       writeJson(RECORDS_FILE, records);
 
+      scheduleGitSync(`Daily hisab saved (${body.date})`);
+
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ success: true, record: merged }));
       return;
@@ -222,6 +298,7 @@ const server = http.createServer(async (req, res) => {
         } else if (body.deposits && Array.isArray(body.deposits)) {
           writeJson(DEPOSITS_FILE, body.deposits);
         }
+        scheduleGitSync('Customer deposits updated');
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ success: true, message: 'Deposits saved' }));
         return;
@@ -249,6 +326,7 @@ const server = http.createServer(async (req, res) => {
         } else if (body.payouts && Array.isArray(body.payouts)) {
           writeJson(PAYOUTS_FILE, body.payouts);
         }
+        scheduleGitSync('Kitna Baki / Udhari updated');
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ success: true, message: 'Payouts saved' }));
         return;
@@ -260,7 +338,7 @@ const server = http.createServer(async (req, res) => {
     }
   }
 
-  // 8. GET /api/settings & POST /api/settings (for password & shop name)
+  // 8. GET /api/settings & POST /api/settings (for username, password & shop name)
   if (pathname === '/api/settings') {
     if (req.method === 'GET') {
       const settings = readJson(SETTINGS_FILE, {});
@@ -274,6 +352,7 @@ const server = http.createServer(async (req, res) => {
         const existing = readJson(SETTINGS_FILE, {});
         const updated = { ...existing, ...body };
         writeJson(SETTINGS_FILE, updated);
+        scheduleGitSync('Shop & security settings updated');
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ success: true, settings: updated }));
         return;
@@ -301,6 +380,7 @@ const server = http.createServer(async (req, res) => {
         } else if (body.deleted && Array.isArray(body.deleted)) {
           writeJson(DELETED_FILE, body.deleted);
         }
+        scheduleGitSync('Deleted records history updated');
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ success: true, message: 'Deleted history saved' }));
         return;
@@ -309,6 +389,35 @@ const server = http.createServer(async (req, res) => {
         res.end(JSON.stringify({ error: err.message }));
         return;
       }
+    }
+  }
+
+  // 10. GET /api/git-status & POST /api/git-sync (GitHub Auto-Sync Engine)
+  if (pathname === '/api/git-status') {
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({
+      success: true,
+      repo: 'Himanshu2k24/Bank-CSP',
+      branch: 'main',
+      lastSyncTime: lastGitSyncTime,
+      status: lastGitSyncStatus,
+      lastMessage: lastGitSyncMessage
+    }));
+    return;
+  }
+
+  if (pathname === '/api/git-sync' && req.method === 'POST') {
+    try {
+      const body = await parseBody(req);
+      const action = body.action || 'Manual user sync';
+      const result = await executeGitSync(action);
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify(result));
+      return;
+    } catch (err) {
+      res.writeHead(500, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ success: false, error: err.message }));
+      return;
     }
   }
 

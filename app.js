@@ -15,6 +15,7 @@
   let activeTab = 'daily'; // 'daily', 'deposit', 'payouts', or 'deleted'
   let activeDenomTarget = 'morning';
   let centerName = localStorage.getItem('csp_center_name') || 'CSP Balance Manager';
+  let masterUsername = localStorage.getItem('csp_master_username') || 'admin';
   let masterPassword = localStorage.getItem('csp_master_password') || '';
   let isServerConnected = false;
 
@@ -37,6 +38,7 @@
     lockScreenTitle: document.getElementById('lockScreenTitle'),
     lockScreenSubtitle: document.getElementById('lockScreenSubtitle'),
     lockScreenForm: document.getElementById('lockScreenForm'),
+    lockUsernameInput: document.getElementById('lockUsernameInput'),
     lockInputLabel: document.getElementById('lockInputLabel'),
     lockPasswordInput: document.getElementById('lockPasswordInput'),
     togglePasswordVisibilityBtn: document.getElementById('togglePasswordVisibilityBtn'),
@@ -114,6 +116,8 @@
     depositForm: document.getElementById('depositForm'),
     depositCustomerName: document.getElementById('depositCustomerName'),
     depositAccountNumber: document.getElementById('depositAccountNumber'),
+    accDigitCount: document.getElementById('accDigitCount'),
+    accNumberError: document.getElementById('accNumberError'),
     depositAmount: document.getElementById('depositAmount'),
     depositPaymentDate: document.getElementById('depositPaymentDate'),
     depositSummaryTotal: document.getElementById('depositSummaryTotal'),
@@ -208,6 +212,10 @@
     forceSyncBtn: document.getElementById('forceSyncBtn'),
     downloadBackupBtn: document.getElementById('downloadBackupBtn'),
     restoreFileInput: document.getElementById('restoreFileInput'),
+    gitSyncBadge: document.getElementById('gitSyncBadge'),
+    gitSyncStatusText: document.getElementById('gitSyncStatusText'),
+    manualGitSyncBtn: document.getElementById('manualGitSyncBtn'),
+    manualGitSyncBtnText: document.getElementById('manualGitSyncBtnText'),
 
     // Denomination Modal
     denomModal: document.getElementById('denomModal'),
@@ -233,6 +241,7 @@
     cancelCenterBtn: document.getElementById('cancelCenterBtn'),
     saveCenterBtn: document.getElementById('saveCenterBtn'),
     settingCenterName: document.getElementById('settingCenterName'),
+    settingUsername: document.getElementById('settingUsername'),
     settingPassword: document.getElementById('settingPassword'),
 
     // Print Slips
@@ -301,18 +310,23 @@
   }, { passive: true });
 
   // =========================================================================
-  // 🔒 MASTER PASSWORD & 7-DAY EXPIRATION SYSTEM
+  // 🔒 MASTER USERNAME & PASSWORD (7-DAY REMEMBER AUTH)
   // =========================================================================
   const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
 
   function checkPasswordAuth() {
-    // 1. If no password set anywhere yet
+    // 1. If no password set anywhere yet -> Setup Admin Account Mode
     if (!masterPassword) {
-      el.lockScreenTitle.innerText = "Setup Master Password / PIN";
-      el.lockScreenSubtitle.innerText = "Set a secure password for your personal site";
-      el.lockInputLabel.innerText = "Create New Password / PIN";
-      el.unlockBtnText.innerText = "Save & Unlock";
+      el.lockScreenTitle.innerText = "Setup Admin Account";
+      el.lockScreenSubtitle.innerText = "Set a username and password to secure your personal CSP site";
+      if (el.lockUsernameInput) {
+        el.lockUsernameInput.value = masterUsername || 'admin';
+        el.lockUsernameInput.disabled = false;
+      }
+      el.lockInputLabel.innerText = "Create Password / PIN";
+      el.unlockBtnText.innerText = "Create Account & Unlock";
       el.rememberMeContainer.classList.add('hidden');
+      el.lockErrorMsg.classList.add('hidden');
       el.lockScreenOverlay.classList.remove('hidden');
       return false;
     }
@@ -327,9 +341,13 @@
       return true;
     }
 
-    // 3. Expired or not logged in -> Prompt for password
+    // 3. Expired or not logged in -> Prompt for Username & Password
     el.lockScreenTitle.innerText = "Personal CSP Vault";
-    el.lockScreenSubtitle.innerText = "Enter your Master Password / PIN to unlock";
+    el.lockScreenSubtitle.innerText = "Enter your Username and Password to unlock";
+    if (el.lockUsernameInput) {
+      el.lockUsernameInput.value = masterUsername || 'admin';
+      el.lockUsernameInput.disabled = false;
+    }
     el.lockInputLabel.innerText = "Password / PIN";
     el.unlockBtnText.innerText = "Unlock Site";
     el.rememberMeContainer.classList.remove('hidden');
@@ -341,39 +359,55 @@
 
   function handleUnlockSubmit(e) {
     e.preventDefault();
-    const entered = el.lockPasswordInput.value.trim();
+    const enteredUser = el.lockUsernameInput ? el.lockUsernameInput.value.trim() : 'admin';
+    const enteredPass = el.lockPasswordInput.value.trim();
 
-    // Setup mode: user sets new password
+    // Setup mode: user sets new username and password
     if (!masterPassword) {
-      if (!entered || entered.length < 3) {
+      if (!enteredUser || enteredUser.length < 2) {
+        alert('Username should be at least 2 characters long!');
+        return;
+      }
+      if (!enteredPass || enteredPass.length < 3) {
         alert('Password should be at least 3 characters or numbers long!');
         return;
       }
-      masterPassword = entered;
+      masterUsername = enteredUser;
+      masterPassword = enteredPass;
+      localStorage.setItem('csp_master_username', masterUsername);
       localStorage.setItem('csp_master_password', masterPassword);
+
       // Set 7 days session
       const expiry = Date.now() + SEVEN_DAYS_MS;
       localStorage.setItem('csp_session_expiry', expiry.toString());
       el.lockScreenOverlay.classList.add('hidden');
-      showToast('Master password saved! Unlocked for 7 days.');
+      showToast('Admin account created! Unlocked for 7 days.');
       syncAllDataToServer();
       return;
     }
 
-    // Verify existing password
-    if (entered === masterPassword) {
+    // Verify existing username and password
+    const userMatches = enteredUser.toLowerCase() === (masterUsername || 'admin').toLowerCase();
+    const passMatches = enteredPass === masterPassword;
+
+    if (userMatches && passMatches) {
       el.lockErrorMsg.classList.add('hidden');
       const remember = el.rememberMeCheckbox.checked;
       const expiry = Date.now() + (remember ? SEVEN_DAYS_MS : 2 * 60 * 60 * 1000);
       localStorage.setItem('csp_session_expiry', expiry.toString());
       el.lockScreenOverlay.classList.add('hidden');
-      showToast('Unlocked! Access valid for 7 days.');
+      showToast(`Welcome back, ${masterUsername}! Unlocked for 7 days.`);
     } else {
+      el.lockErrorMsg.innerText = !userMatches ? 'Incorrect username. Please check and try again.' : 'Incorrect password. Please try again.';
       el.lockErrorMsg.classList.remove('hidden');
       el.lockCard.classList.remove('animate-shake');
       void el.lockCard.offsetWidth; // Trigger reflow for animation
       el.lockCard.classList.add('animate-shake');
-      el.lockPasswordInput.select();
+      if (!userMatches && el.lockUsernameInput) {
+        el.lockUsernameInput.select();
+      } else {
+        el.lockPasswordInput.select();
+      }
     }
   }
 
@@ -399,6 +433,13 @@
             centerName = data.settings.centerName;
             localStorage.setItem('csp_center_name', centerName);
             el.headerTitle.innerText = centerName;
+          }
+          if (data.settings.username) {
+            if (masterUsername && masterUsername !== data.settings.username) {
+              localStorage.removeItem('csp_session_expiry');
+            }
+            masterUsername = data.settings.username;
+            localStorage.setItem('csp_master_username', masterUsername);
           }
           if (data.settings.password) {
             if (masterPassword && masterPassword !== data.settings.password) {
@@ -488,6 +529,7 @@
         payouts: getPayouts(),
         settings: {
           centerName: centerName,
+          username: masterUsername || 'admin',
           password: masterPassword
         },
         deleted: getDeletedHistory()
@@ -521,6 +563,7 @@
       version: '2.0',
       exportedAt: new Date().toISOString(),
       centerName: centerName,
+      masterUsername: masterUsername || 'admin',
       masterPassword: masterPassword,
       history: JSON.parse(localStorage.getItem('csp_history') || '[]'),
       deposits: getDeposits(),
@@ -560,6 +603,10 @@
             localStorage.setItem('csp_center_name', centerName);
             el.headerTitle.innerText = centerName;
           }
+          if (data.masterUsername) {
+            masterUsername = data.masterUsername;
+            localStorage.setItem('csp_master_username', masterUsername);
+          }
           if (data.masterPassword) {
             masterPassword = data.masterPassword;
             localStorage.setItem('csp_master_password', masterPassword);
@@ -593,6 +640,47 @@
     e.target.value = ''; // Reset file input
   }
 
+  // =========================================================================
+  // GITHUB AUTO-SYNC TRIGGER (CLIENT-SIDE)
+  // =========================================================================
+  async function triggerGitSync(actionDescription = 'Update data') {
+    if (!isServerConnected) return;
+    try {
+      if (el.gitSyncStatusText) el.gitSyncStatusText.innerText = 'Syncing to GitHub...';
+      const res = await fetch('/api/git-sync', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: actionDescription })
+      });
+      if (res.ok) {
+        const json = await res.json();
+        if (json.success) {
+          const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+          if (el.gitSyncStatusText) el.gitSyncStatusText.innerText = `Pushed (${time})`;
+          if (el.gitSyncBadge) {
+            el.gitSyncBadge.className = 'px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30';
+            el.gitSyncBadge.innerText = 'Auto-Push Active';
+          }
+        }
+      }
+    } catch (e) {
+      console.warn('Git sync request failed:', e);
+    }
+  }
+
+  async function checkGitStatus() {
+    if (!isServerConnected) return;
+    try {
+      const res = await fetch('/api/git-status');
+      if (res.ok) {
+        const json = await res.json();
+        if (json.success && el.gitSyncStatusText) {
+          el.gitSyncStatusText.innerText = json.status || 'Active';
+        }
+      }
+    } catch (e) {}
+  }
+
   // --- INIT ---
   async function init() {
     const today = new Date().toISOString().split('T')[0];
@@ -603,12 +691,16 @@
 
     el.headerTitle.innerText = centerName;
     el.settingCenterName.value = centerName;
+    if (el.settingUsername) el.settingUsername.value = masterUsername || 'admin';
 
     // Check & sync server data first
     await checkServerStatusAndSync();
 
     // Check password protection
     checkPasswordAuth();
+
+    // Check GitHub sync status
+    checkGitStatus();
 
     // Load day data
     await loadDayData(today);
@@ -940,12 +1032,21 @@
   function handleDepositSubmit(e) {
     e.preventDefault();
     const name = el.depositCustomerName.value.trim();
-    const account = el.depositAccountNumber.value.trim();
+    const account = el.depositAccountNumber.value.trim().replace(/\D/g, '');
     const amount = parseFloat(el.depositAmount.value) || 0;
     const paymentDate = el.depositPaymentDate.value || el.selectedDate.value;
 
     if (!name || !account || amount <= 0) {
       alert('Please fill customer name, account number, and valid amount!');
+      return;
+    }
+
+    // Strict 16-Digit Account Number Validation
+    if (account.length !== 16 || !/^\d{16}$/.test(account)) {
+      if (el.accNumberError) el.accNumberError.classList.remove('hidden');
+      el.depositAccountNumber.classList.add('border-rose-400');
+      el.depositAccountNumber.focus();
+      alert(`Account Number must be exactly 16 digits!\n(खाता संख्या ठीक 16 अंकों की होनी चाहिए, अभी ${account.length} अंक हैं)`);
       return;
     }
 
@@ -977,6 +1078,12 @@
     el.depositCustomerName.value = '';
     el.depositAccountNumber.value = '';
     el.depositAmount.value = '';
+    if (el.accDigitCount) {
+      el.accDigitCount.innerText = '(0/16 digits)';
+      el.accDigitCount.className = 'text-[10px] font-mono font-bold text-amber-600';
+    }
+    if (el.accNumberError) el.accNumberError.classList.add('hidden');
+    el.depositAccountNumber.classList.remove('border-emerald-400', 'border-rose-400');
 
     showDepositConfirmation(newDeposit);
   }
@@ -2029,6 +2136,7 @@ Thank you for visiting!`;
     // Backup & Restore Actions
     el.openBackupBtn.addEventListener('click', () => {
       checkServerStatusAndSync();
+      checkGitStatus();
       el.backupModal.classList.remove('hidden');
     });
     el.closeBackupModal.addEventListener('click', () => el.backupModal.classList.add('hidden'));
@@ -2039,6 +2147,19 @@ Thank you for visiting!`;
     });
     el.downloadBackupBtn.addEventListener('click', downloadCompleteBackup);
     el.restoreFileInput.addEventListener('change', restoreFromBackupFile);
+
+    // GitHub Manual Push Button
+    if (el.manualGitSyncBtn) {
+      el.manualGitSyncBtn.addEventListener('click', async () => {
+        el.manualGitSyncBtn.disabled = true;
+        if (el.manualGitSyncBtnText) el.manualGitSyncBtnText.innerText = 'Pushing to GitHub...';
+        await syncAllDataToServer();
+        await triggerGitSync('Manual push from UI');
+        el.manualGitSyncBtn.disabled = false;
+        if (el.manualGitSyncBtnText) el.manualGitSyncBtnText.innerText = 'Push to GitHub Now (अभी गिटहब पर भेजें)';
+        showToast('Committed & pushed to GitHub repository!');
+      });
+    }
 
     // Tab Navigation
     el.tabDailyHisab.addEventListener('click', () => switchTab('daily'));
@@ -2079,6 +2200,25 @@ Thank you for visiting!`;
     });
     el.exportDeletedCsvBtn.addEventListener('click', exportDeletedCsv);
     el.clearAllDeletedBtn.addEventListener('click', clearAllDeleted);
+
+    // Live 16-Digit Account Number Sanitizer & Counter
+    el.depositAccountNumber.addEventListener('input', (e) => {
+      e.target.value = e.target.value.replace(/\D/g, '').slice(0, 16);
+      const len = e.target.value.length;
+      if (el.accDigitCount) {
+        if (len === 16) {
+          el.accDigitCount.innerText = '✓ 16 Digits';
+          el.accDigitCount.className = 'text-[10px] font-mono font-bold text-emerald-600';
+          if (el.accNumberError) el.accNumberError.classList.add('hidden');
+          el.depositAccountNumber.classList.remove('border-rose-400');
+          el.depositAccountNumber.classList.add('border-emerald-400');
+        } else {
+          el.accDigitCount.innerText = `(${len}/16 digits)`;
+          el.accDigitCount.className = 'text-[10px] font-mono font-bold text-amber-600';
+          el.depositAccountNumber.classList.remove('border-emerald-400');
+        }
+      }
+    });
 
     // Deposit Form Submit & Filters
     el.depositForm.addEventListener('submit', handleDepositSubmit);
@@ -2198,27 +2338,45 @@ Thank you for visiting!`;
     });
 
     // Center Details & Password Modal
-    el.editCenterBtn.addEventListener('click', () => el.centerModal.classList.remove('hidden'));
+    el.editCenterBtn.addEventListener('click', () => {
+      if (el.settingCenterName) el.settingCenterName.value = centerName || '';
+      if (el.settingUsername) el.settingUsername.value = masterUsername || 'admin';
+      if (el.settingPassword) el.settingPassword.value = '';
+      el.centerModal.classList.remove('hidden');
+    });
     el.cancelCenterBtn.addEventListener('click', () => el.centerModal.classList.add('hidden'));
     el.saveCenterBtn.addEventListener('click', () => {
       centerName = el.settingCenterName.value.trim() || 'CSP Balance Manager';
       localStorage.setItem('csp_center_name', centerName);
       el.headerTitle.innerText = centerName;
 
+      // Update Master Username if entered
+      const newUsername = el.settingUsername ? el.settingUsername.value.trim() : '';
+      if (newUsername) {
+        masterUsername = newUsername;
+        localStorage.setItem('csp_master_username', masterUsername);
+      }
+
       // Update Master Password if entered
       const newPwd = el.settingPassword.value.trim();
+      let pwdUpdated = false;
       if (newPwd) {
         masterPassword = newPwd;
         localStorage.setItem('csp_master_password', masterPassword);
         // Extend 7 days
         localStorage.setItem('csp_session_expiry', (Date.now() + SEVEN_DAYS_MS).toString());
         el.settingPassword.value = '';
-        showToast('Password updated successfully!');
+        pwdUpdated = true;
+      }
+
+      if (pwdUpdated) {
+        showToast('Password & Security settings updated!');
       } else {
-        showToast('Shop details updated');
+        showToast('Shop & Login details updated');
       }
 
       syncAllDataToServer();
+      triggerGitSync('Updated Center & Security Settings');
       el.centerModal.classList.add('hidden');
     });
 
